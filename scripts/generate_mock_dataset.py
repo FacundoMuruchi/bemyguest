@@ -21,9 +21,9 @@ ROOM_TYPES = {
     "estandar": {"cama": "doble", "metros": (18, 25), "precio": (6000, 12000)},
     "superior": {"cama": "queen", "metros": (25, 35), "precio": (12000, 20000)},
     "suite": {"cama": "king size", "metros": (40, 70), "precio": (20000, 40000)},
-    "cabana": {"cama": "doble", "metros": (30, 50), "precio": (15000, 30000)},
+    "cabaña": {"cama": "doble", "metros": (30, 50), "precio": (15000, 30000)},
 }
-ROOM_VIEWS = ["jardin", "calle", "montana", "lago", "mar"]
+ROOM_VIEWS = ["jardín", "calle", "montaña", "lago", "mar"]
 BOOKING_STATES = ["confirmada", "pendiente", "cancelada"]
 
 
@@ -83,7 +83,7 @@ def generate_habitaciones(count, hoteles):
         hotel_id = hotel_ids[(number - 1) % len(hotel_ids)]
         room_index = ((number - 1) // len(hotel_ids)) + 1
         floor = random.randint(1, 8)
-        tipo = random.choice(list(ROOM_TYPES.keys()))
+        tipo = list(ROOM_TYPES.keys())[(number - 1) % len(ROOM_TYPES)]
         specs = ROOM_TYPES[tipo]
 
         habitaciones.append(
@@ -98,11 +98,11 @@ def generate_habitaciones(count, hoteles):
                 "amenities": {
                     "cama": specs["cama"],
                     "metros_cuadrados": random.randint(*specs["metros"]),
-                    "vista": random.choice(ROOM_VIEWS),
+                    "vista": ROOM_VIEWS[(number - 1) % len(ROOM_VIEWS)],
                     "tv_smart": True,
                     "aire_acondicionado": random.choice([True, False]),
-                    "jacuzzi": tipo in ("suite", "cabana") and random.choice([True, False]),
-                    "terraza": tipo == "cabana",
+                    "jacuzzi": tipo in ("suite", "cabaña") and random.choice([True, False]),
+                    "terraza": tipo == "cabaña",
                 },
             }
         )
@@ -242,7 +242,7 @@ def validate_dataset(dataset):
 def write_dataset(dataset, output_path):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as file:
-        json.dump(dataset, file, ensure_ascii=True, indent=2)
+        json.dump(dataset, file, ensure_ascii=False, indent=2)
         file.write("\n")
 
 
