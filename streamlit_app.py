@@ -19,7 +19,7 @@ COLLECTIONS = {
     "Hoteles": mongo.col_hoteles,
     "Habitaciones": mongo.col_habitaciones,
     "Reservas": mongo.col_reservas,
-    "Reseñas": mongo.col_reseñas,
+    "Reseñas": mongo.col_resenas,
 }
 
 SERVICE_OPTIONS = ["wifi", "pileta", "spa", "estacionamiento", "gimnasio", "restaurante"]
@@ -365,7 +365,7 @@ def show_review_form():
             }
             document = merge_extra_attributes(document, raw_extra_attributes)
             if document is not None:
-                save_document(mongo.col_reseñas, document)
+                save_document(mongo.col_resenas, document)
 
 
 def show_manual_registration():

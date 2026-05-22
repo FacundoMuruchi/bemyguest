@@ -14,7 +14,7 @@ DATASET_COLLECTIONS = {
     "hoteles": col_hoteles,
     "habitaciones": col_habitaciones,
     "reservas": col_reservas,
-    "resenas": col_reseñas,
+    "resenas": col_resenas,
 }
 
 
