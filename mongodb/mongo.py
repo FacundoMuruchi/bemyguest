@@ -1,7 +1,11 @@
 import faker
 import random
 from datetime import timedelta
-from config import *
+
+try:
+    from .config import *
+except:
+    from config import *
 
 fake = faker.Faker()
 
@@ -27,13 +31,27 @@ def eliminar_documento(collection, criterio):
 def eliminar_todos_documentos(collection):
     collection.delete_many({})
 
+# ── USUARIOS ──────────────────────────────────────────────────────────────────
+def insertar_usuarios_faker(n):
+    for _ in range(n):
+        usuario = {
+            "nombre":     fake.first_name(),
+            "apellido":   fake.last_name(),
+            "email":      fake.email(),
+            "telefono":   fake.phone_number(),
+            "pais":         fake.country(),
+            "ciudad":       fake.city()
+        }
+        insertar_documento(col_usuarios, usuario)
+    print(f"{n} usuarios insertados.")
+
 # ── HOTELES ──────────────────────────────────────────────────────────────────
 def insertar_hoteles_faker(n):
     for _ in range(n):
         hotel = {
             "nombre":    "Hotel " + fake.last_name(),
-            "destino":   fake.city(),
-            "pais":      "Argentina",
+            "ciudad":   fake.city(),
+            "pais":      fake.country(),
             "categoria": random.randint(1, 5),
             "servicios": random.sample(
                 ["wifi", "pileta", "spa", "estacionamiento", "gimnasio", "restaurante"],
@@ -47,10 +65,10 @@ def insertar_hoteles_faker(n):
 
 # ── HABITACIONES ─────────────────────────────────────────────────────────────
 TIPOS = {
-    "estandar":  {"cama": "doble",     "metros": (18, 25), "precio": (60,  120)},
-    "superior":  {"cama": "queen",     "metros": (25, 35), "precio": (120, 200)},
-    "suite":     {"cama": "king size", "metros": (40, 70), "precio": (200, 400)},
-    "cabana":    {"cama": "doble",     "metros": (30, 50), "precio": (150, 300)},
+    "estandar":  {"cama": "doble",     "metros": (18, 25), "precio": (6000,  120)},
+    "superior":  {"cama": "queen",     "metros": (25, 35), "precio": (12000, 20000)},
+    "suite":     {"cama": "king size", "metros": (40, 70), "precio": (20000, 40000)},
+    "cabaña":    {"cama": "doble",     "metros": (30, 50), "precio": (15000, 30000)},
 }
 
 def insertar_habitaciones_faker(hotel_ids, hab_por_hotel=5):
@@ -62,7 +80,7 @@ def insertar_habitaciones_faker(hotel_ids, hab_por_hotel=5):
                 "hotel_id":          hotel_id,
                 "numero":            str(random.randint(1, 4)) + f"{numero:02d}",
                 "tipo":              tipo,
-                "capacidad_adultos": random.randint(1, 3),
+                "capacidad":         random.randint(1, 6),
                 "precio_por_noche":  round(random.uniform(*specs["precio"]), 2),
                 "disponible":        random.choice([True, False]),
                 "amenities": {
@@ -70,10 +88,9 @@ def insertar_habitaciones_faker(hotel_ids, hab_por_hotel=5):
                     "metros_cuadrados":  random.randint(*specs["metros"]),
                     "vista":             random.choice(["jardín", "calle", "montaña", "lago", "mar"]),
                     "tv_smart":          True,
-                    "aire_acondicionado": random.choice([True, False]),
-                    # solo suites/cabañas tienen extras
-                    **({"jacuzzi": random.choice([True, False])} if tipo in ("suite", "cabana") else {}),
-                    **({"terraza": True} if tipo == "cabana" else {}),
+                    **({"aire_acondicionado": True} if random.choice([True, False]) else {}),
+                    **({"jacuzzi": True} if tipo in ("suite", "cabaña") else {}),
+                    **({"terraza": True} if tipo == "cabaña" else {}),
                 }
             }
             insertar_documento(col_habitaciones, habitacion)
@@ -92,10 +109,11 @@ def insertar_reservas_faker(n):
 
     for _ in range(n):
         hab      = random.choice(habitaciones)
+        usr = random.choice(list(col_usuarios.find({}, {"_id": 1})))
         check_in = fake.date_between(start_date="-6m", end_date="+3m")
         noches   = random.randint(1, 10)
         reserva  = {
-            "usuario_id":    fake.bothify("usr_#####"),
+            "usuario_id":    usr["_id"],
             "habitacion_id": hab["_id"],
             "hotel_id":      hab["hotel_id"],
             "check_in":      check_in.isoformat(),
@@ -122,9 +140,10 @@ def insertar_resenas_faker(n):
 
     for _ in range(n):
         hotel = random.choice(hoteles)
+        usr = random.choice(list(col_usuarios.find({}, {"_id": 1})))
         resena = {
             "hotel_id":   hotel["_id"],
-            "usuario_id": fake.bothify("usr_#####"),
+            "usuario_id": usr["_id"],
             "calificacion": {
                 "general":    round(random.uniform(2.5, 5.0), 1),
                 "limpieza":   random.randint(1, 5),
