@@ -115,7 +115,6 @@ def insertar_reservas_faker(n):
         reserva  = {
             "usuario_id":    usr["_id"],
             "habitacion_id": hab["_id"],
-            "hotel_id":      hab["hotel_id"],
             "check_in":      check_in.isoformat(),
             "check_out":     (check_in + timedelta(days=noches)).isoformat(),
             "noches":        noches,
