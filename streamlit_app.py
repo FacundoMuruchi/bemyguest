@@ -2,14 +2,17 @@ from contextlib import redirect_stdout
 from datetime import date, timedelta
 from io import StringIO
 import json
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 from bson import ObjectId
-from pymongo.errors import ServerSelectionTimeoutError
+from pymongo.errors import PyMongoError, ServerSelectionTimeoutError
 
 from mongodb import mongo
 
+
+DEFAULT_DATASET_PATH = Path(__file__).resolve().parent / "mock_data" / "bemyguest_dataset.json"
 
 COLLECTIONS = {
     "Usuarios": mongo.col_usuarios,
@@ -63,17 +66,13 @@ def delete_all_data():
         mongo.eliminar_todos_documentos(collection)
 
 
-def seed_data(usuarios, hoteles, habitaciones_por_hotel, reservas, resenas, reset_first):
+def import_dataset(dataset_path=DEFAULT_DATASET_PATH):
     def action():
-        if reset_first:
-            delete_all_data()
-            print("Datos anteriores eliminados.")
-        mongo.insertar_usuarios_faker(usuarios)
-        mongo.insertar_hoteles_faker(hoteles)
-        hotel_ids = mongo.col_hoteles.distinct("_id")
-        mongo.insertar_habitaciones_faker(hotel_ids, habitaciones_por_hotel)
-        mongo.insertar_reservas_faker(reservas)
-        mongo.insertar_resenas_faker(resenas)
+        counts = mongo.importar_dataset_json(dataset_path, reset_first=True)
+        print(f"Dataset importado desde {dataset_path}")
+        print(f"Total registros: {sum(counts.values())}")
+        for collection_name, count in counts.items():
+            print(f"- {collection_name}: {count}")
 
     return run_engine_action(action)
 
@@ -431,20 +430,23 @@ def main():
         show_manual_registration()
 
     with seed_tab:
-        st.subheader("Generar datos de prueba")
-        col_a, col_b, col_c, col_d, col_e = st.columns(5)
-        usuarios = col_a.number_input("Usuarios", min_value=1, max_value=200, value=8)
-        hoteles = col_b.number_input("Hoteles", min_value=1, max_value=50, value=4)
-        habitaciones = col_c.number_input("Habitaciones por hotel", min_value=1, max_value=20, value=2)
-        reservas = col_d.number_input("Reservas", min_value=0, max_value=200, value=4)
-        resenas = col_e.number_input("Reseñas", min_value=0, max_value=200, value=4)
-        reset_first = st.checkbox("Limpiar datos antes de cargar", value=True)
+        st.subheader("Importar dataset")
+        st.code(str(DEFAULT_DATASET_PATH), language="text")
+        st.caption("La importación reemplaza los documentos actuales de las colecciones principales.")
 
-        if st.button("Generar dataset", type="primary"):
-            output = seed_data(usuarios, hoteles, habitaciones, reservas, resenas, reset_first)
-            st.session_state["last_success"] = "Dataset generado correctamente."
-            st.session_state["last_output"] = output
-            st.rerun()
+        if st.button("Importar dataset", type="primary"):
+            try:
+                output = import_dataset()
+            except FileNotFoundError:
+                st.error(f"No se encontró el dataset en {DEFAULT_DATASET_PATH}.")
+            except (ValueError, json.JSONDecodeError) as error:
+                st.error(f"El dataset no es válido: {error}")
+            except PyMongoError as error:
+                st.error(f"No se pudo importar el dataset en MongoDB: {error}")
+            else:
+                st.session_state["last_success"] = "Dataset importado correctamente."
+                st.session_state["last_output"] = output
+                st.rerun()
 
     with admin_tab:
         st.subheader("Mantenimiento")
