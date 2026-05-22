@@ -1,6 +1,8 @@
 # BeMyGuest
 
-Motor de datos con MongoDB para hoteles, habitaciones, reservas y reseñas.
+![Logo](be_my_guest.png)
+
+Un sistema que permite a los usuarios buscar habitaciones, recibir recomendaciones personalizadas y gestionar sus reservas, similar a la aplicación Airbnb. A nivel backend, el sistema requiere manejar catálogos con descripciones variables, controlar la disponibilidad con latencia ultrabaja para evitar el overbooking (sobreventa), procesar recomendaciones basadas en el comportamiento de usuarios similares y registrar un historial inmutable y masivo de todas las transacciones y movimientos.
 
 ## Ejecutar la interfaz
 
