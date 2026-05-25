@@ -10,6 +10,7 @@ from bson import ObjectId
 from pymongo.errors import PyMongoError, ServerSelectionTimeoutError
 
 from mongodb import mongo
+from implementacion_neo4j import neo4j_service
 
 
 DEFAULT_DATASET_PATH = Path(__file__).resolve().parent / "mock_data" / "bemyguest_dataset.json"
@@ -73,7 +74,6 @@ def import_dataset(dataset_path=DEFAULT_DATASET_PATH):
         print(f"Total registros: {sum(counts.values())}")
         for collection_name, count in counts.items():
             print(f"- {collection_name}: {count}")
-
     return run_engine_action(action)
 
 
@@ -98,15 +98,13 @@ def parse_extra_attributes(raw_extra_attributes):
     raw_extra_attributes = raw_extra_attributes.strip()
     if not raw_extra_attributes:
         return {}
-
     try:
         extra_attributes = json.loads(raw_extra_attributes)
     except json.JSONDecodeError as error:
         st.error(f"Los atributos adicionales no tienen un JSON válido: {error.msg}")
         return None
-
     if not isinstance(extra_attributes, dict):
-        st.error("Los atributos adicionales deben ser un objeto JSON, por ejemplo: {\"origen\": \"web\"}.")
+        st.error("Los atributos adicionales deben ser un objeto JSON.")
         return None
     if "_id" in extra_attributes:
         st.error("No se puede definir manualmente el atributo _id desde la interfaz.")
@@ -130,7 +128,6 @@ def save_document(collection, document):
 def build_filter(collection_name, search_text):
     if not search_text:
         return {}
-
     regex = {"$regex": search_text, "$options": "i"}
     searchable_fields = {
         "Usuarios": ["nombre", "apellido", "email", "telefono", "pais", "ciudad"],
@@ -146,18 +143,10 @@ def show_collection(collection_name, limit, search_text):
     collection = COLLECTIONS[collection_name]
     query = build_filter(collection_name, search_text)
     docs = serialize_docs(collection.find(query).limit(limit))
-
     if not docs:
         st.info("No hay documentos para mostrar con esos filtros.")
         return
-
-    view_mode = st.radio(
-        "Vista",
-        ["Tabla", "JSON"],
-        horizontal=True,
-        label_visibility="collapsed",
-    )
-
+    view_mode = st.radio("Vista", ["Tabla", "JSON"], horizontal=True, label_visibility="collapsed")
     if view_mode == "Tabla":
         st.dataframe(pd.json_normalize(docs), use_container_width=True, hide_index=True)
     else:
@@ -183,16 +172,8 @@ def show_user_form():
         pais = col_d.text_input("País")
         ciudad = col_e.text_input("Ciudad")
         raw_extra_attributes = show_extra_attributes_help()
-
         if st.form_submit_button("Registrar usuario", type="primary"):
-            document = {
-                "nombre": nombre,
-                "apellido": apellido,
-                "email": email,
-                "telefono": telefono,
-                "pais": pais,
-                "ciudad": ciudad,
-            }
+            document = {"nombre": nombre, "apellido": apellido, "email": email, "telefono": telefono, "pais": pais, "ciudad": ciudad}
             document = merge_extra_attributes(document, raw_extra_attributes)
             if document is not None:
                 save_document(mongo.col_usuarios, document)
@@ -208,16 +189,8 @@ def show_hotel_form():
         servicios = st.multiselect("Servicios", SERVICE_OPTIONS, default=["wifi"])
         calificacion_promedio = st.slider("Calificación promedio", 1.0, 5.0, 4.0, 0.1)
         raw_extra_attributes = show_extra_attributes_help()
-
         if st.form_submit_button("Registrar hotel", type="primary"):
-            document = {
-                "nombre": nombre,
-                "ciudad": ciudad,
-                "pais": pais,
-                "categoria": categoria,
-                "servicios": servicios,
-                "calificacion_promedio": calificacion_promedio,
-            }
+            document = {"nombre": nombre, "ciudad": ciudad, "pais": pais, "categoria": categoria, "servicios": servicios, "calificacion_promedio": calificacion_promedio}
             document = merge_extra_attributes(document, raw_extra_attributes)
             if document is not None:
                 save_document(mongo.col_hoteles, document)
@@ -228,7 +201,6 @@ def show_room_form():
     if not hoteles:
         st.info("Primero registrá al menos un hotel para poder asociar la habitación.")
         return
-
     with st.form("create_room_form", clear_on_submit=True):
         hotel = st.selectbox("Hotel", hoteles, format_func=hotel_label)
         col_a, col_b, col_c = st.columns(3)
@@ -238,7 +210,6 @@ def show_room_form():
         col_d, col_e = st.columns(2)
         precio_por_noche = col_d.number_input("Precio por noche", min_value=0.0, value=10000.0, step=500.0)
         disponible = col_e.checkbox("Disponible", value=True)
-
         st.subheader("Amenities")
         col_f, col_g, col_h = st.columns(3)
         cama = col_f.selectbox("Cama", BED_OPTIONS)
@@ -250,25 +221,8 @@ def show_room_form():
         jacuzzi = col_k.checkbox("Jacuzzi")
         terraza = col_l.checkbox("Terraza")
         raw_extra_attributes = show_extra_attributes_help()
-
         if st.form_submit_button("Registrar habitación", type="primary"):
-            document = {
-                "hotel_id": hotel["_id"],
-                "numero": numero,
-                "tipo": tipo,
-                "capacidad_adultos": capacidad_adultos,
-                "precio_por_noche": precio_por_noche,
-                "disponible": disponible,
-                "amenities": {
-                    "cama": cama,
-                    "metros_cuadrados": metros_cuadrados,
-                    "vista": vista,
-                    "tv_smart": tv_smart,
-                    "aire_acondicionado": aire_acondicionado,
-                    "jacuzzi": jacuzzi,
-                    "terraza": terraza,
-                },
-            }
+            document = {"hotel_id": hotel["_id"], "numero": numero, "tipo": tipo, "capacidad_adultos": capacidad_adultos, "precio_por_noche": precio_por_noche, "disponible": disponible, "amenities": {"cama": cama, "metros_cuadrados": metros_cuadrados, "vista": vista, "tv_smart": tv_smart, "aire_acondicionado": aire_acondicionado, "jacuzzi": jacuzzi, "terraza": terraza}}
             document = merge_extra_attributes(document, raw_extra_attributes)
             if document is not None:
                 save_document(mongo.col_habitaciones, document)
@@ -280,7 +234,6 @@ def show_booking_form():
     if not usuarios or not habitaciones:
         st.info("Primero registrá usuarios y habitaciones para poder crear una reserva.")
         return
-
     with st.form("create_booking_form", clear_on_submit=True):
         col_a, col_b = st.columns(2)
         usuario = col_a.selectbox("Usuario", usuarios, format_func=user_label)
@@ -289,18 +242,12 @@ def show_booking_form():
         col_c, col_d, col_e = st.columns(3)
         check_in = col_c.date_input("Check-in", value=date.today())
         check_out = col_d.date_input("Check-out", value=date.today() + timedelta(days=1))
-        huespedes = col_e.number_input(
-            "Huéspedes",
-            min_value=1,
-            max_value=capacidad_habitacion,
-            value=min(2, capacidad_habitacion),
-        )
+        huespedes = col_e.number_input("Huéspedes", min_value=1, max_value=capacidad_habitacion, value=min(2, capacidad_habitacion))
         col_f, col_g = st.columns(2)
         estado = col_f.selectbox("Estado", mongo.ESTADOS)
         servicios_extra = col_g.multiselect("Servicios extra", EXTRA_SERVICE_OPTIONS)
         fecha_reserva = st.date_input("Fecha de reserva", value=date.today())
         raw_extra_attributes = show_extra_attributes_help()
-
         if st.form_submit_button("Registrar reserva", type="primary"):
             noches = (check_out - check_in).days
             if noches <= 0:
@@ -312,19 +259,7 @@ def show_booking_form():
             if huespedes > capacidad_habitacion:
                 st.error("La cantidad de huéspedes no puede superar la capacidad de la habitación.")
                 return
-
-            document = {
-                "usuario_id": usuario["_id"],
-                "habitacion_id": habitacion["_id"],
-                "hotel_id": habitacion["hotel_id"],
-                "check_in": check_in.isoformat(),
-                "check_out": check_out.isoformat(),
-                "noches": noches,
-                "huespedes": huespedes,
-                "estado": estado,
-                "servicios_extra": servicios_extra,
-                "fecha_reserva": fecha_reserva.isoformat(),
-            }
+            document = {"usuario_id": usuario["_id"], "habitacion_id": habitacion["_id"], "hotel_id": habitacion["hotel_id"], "check_in": check_in.isoformat(), "check_out": check_out.isoformat(), "noches": noches, "huespedes": huespedes, "estado": estado, "servicios_extra": servicios_extra, "fecha_reserva": fecha_reserva.isoformat()}
             document = merge_extra_attributes(document, raw_extra_attributes)
             if document is not None:
                 save_document(mongo.col_reservas, document)
@@ -336,7 +271,6 @@ def show_review_form():
     if not usuarios or not hoteles:
         st.info("Primero registrá usuarios y hoteles para poder crear una reseña.")
         return
-
     with st.form("create_review_form", clear_on_submit=True):
         col_a, col_b = st.columns(2)
         usuario = col_a.selectbox("Usuario", usuarios, format_func=user_label)
@@ -349,39 +283,16 @@ def show_review_form():
         comentario = st.text_area("Comentario")
         fecha = st.date_input("Fecha", value=date.today())
         raw_extra_attributes = show_extra_attributes_help()
-
         if st.form_submit_button("Registrar reseña", type="primary"):
-            document = {
-                "hotel_id": hotel["_id"],
-                "usuario_id": usuario["_id"],
-                "calificacion": {
-                    "general": general,
-                    "limpieza": limpieza,
-                    "atencion": atencion,
-                    "ubicacion": ubicacion,
-                },
-                "comentario": comentario,
-                "fecha": fecha.isoformat(),
-            }
+            document = {"hotel_id": hotel["_id"], "usuario_id": usuario["_id"], "calificacion": {"general": general, "limpieza": limpieza, "atencion": atencion, "ubicacion": ubicacion}, "comentario": comentario, "fecha": fecha.isoformat()}
             document = merge_extra_attributes(document, raw_extra_attributes)
             if document is not None:
                 save_document(mongo.col_resenas, document)
 
 
 def show_manual_registration():
-    collection_name = st.selectbox(
-        "Colección a registrar",
-        list(COLLECTIONS.keys()),
-        key="create_collection_name",
-    )
-
-    form_renderers = {
-        "Usuarios": show_user_form,
-        "Hoteles": show_hotel_form,
-        "Habitaciones": show_room_form,
-        "Reservas": show_booking_form,
-        "Reseñas": show_review_form,
-    }
+    collection_name = st.selectbox("Colección a registrar", list(COLLECTIONS.keys()), key="create_collection_name")
+    form_renderers = {"Usuarios": show_user_form, "Hoteles": show_hotel_form, "Habitaciones": show_room_form, "Reservas": show_booking_form, "Reseñas": show_review_form}
     form_renderers[collection_name]()
 
 
@@ -390,6 +301,41 @@ def show_dashboard():
     columns = st.columns(len(counts))
     for column, (name, count) in zip(columns, counts.items()):
         column.metric(name, count)
+
+
+# ---------------------------------------------------------------------------
+# Helpers Neo4j
+# ---------------------------------------------------------------------------
+
+def ping_neo4j():
+    return neo4j_service.ping()
+
+
+def show_neo4j_tab():
+    st.subheader("Recomendaciones de hoteles")
+    neo4j_ok = ping_neo4j()
+    if not neo4j_ok:
+        st.error("No se pudo conectar a Neo4j. Verificá que esté corriendo en bolt://localhost:7687.")
+        return
+    st.success("Neo4j conectado ✅")
+    st.info("Las queries de recomendaciones están en desarrollo.")
+
+
+def show_neo4j_seed_section():
+    st.subheader("Importar dataset a Neo4j")
+    st.caption("Carga usuarios, hoteles y relaciones en el grafo.")
+
+    if st.button("Importar dataset en Neo4j", type="primary", key="neo4j_import_btn"):
+        if not ping_neo4j():
+            st.error("No se puede conectar a Neo4j.")
+            return
+        try:
+            with st.spinner("Importando..."):
+                counts = neo4j_service.importar_dataset(DEFAULT_DATASET_PATH, reset=True)
+            st.success("Dataset importado en Neo4j correctamente.")
+            st.json(counts)
+        except Exception as e:
+            st.error(f"Error: {e}")
 
 
 def main():
@@ -412,8 +358,8 @@ def main():
         if output:
             st.code(output, language="text")
 
-    explore_tab, create_tab, seed_tab, admin_tab = st.tabs(
-        ["Explorar datos", "Registrar documento", "Cargar datos", "Administrar"]
+    explore_tab, create_tab, seed_tab, neo4j_tab, neo4j_seed_tab, admin_tab = st.tabs(
+        ["Explorar datos", "Registrar documento", "Cargar datos", "Recomendaciones (Neo4j)", "Cargar datos Neo4j", "Administrar"]
     )
 
     with explore_tab:
@@ -433,7 +379,6 @@ def main():
         st.subheader("Importar dataset")
         st.code(str(DEFAULT_DATASET_PATH), language="text")
         st.caption("La importación reemplaza los documentos actuales de las colecciones principales.")
-
         if st.button("Importar dataset", type="primary"):
             try:
                 output = import_dataset()
@@ -448,15 +393,16 @@ def main():
                 st.session_state["last_output"] = output
                 st.rerun()
 
+    with neo4j_tab:
+        show_neo4j_tab()
+
+    with neo4j_seed_tab:
+        show_neo4j_seed_section()
+
     with admin_tab:
         st.subheader("Mantenimiento")
-        selected = st.multiselect(
-            "Colecciones a limpiar",
-            list(COLLECTIONS.keys()),
-            default=[],
-        )
+        selected = st.multiselect("Colecciones a limpiar", list(COLLECTIONS.keys()), default=[])
         confirm = st.checkbox("Confirmo que quiero eliminar los documentos seleccionados")
-
         if st.button("Eliminar documentos", disabled=not selected or not confirm):
             for name in selected:
                 mongo.eliminar_todos_documentos(COLLECTIONS[name])
