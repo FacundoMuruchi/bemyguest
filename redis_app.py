@@ -79,6 +79,12 @@ def get_keys_summary():
 st.title("⚡ BeMyGuest — Redis Sandbox & Auditor en Vivo")
 st.caption("Panel de control exclusivo para depurar y demostrar las capacidades en memoria de Redis (concurrencia, locks y TTLs).")
 
+# --- BANNER DE MENSAJES DEL SANDBOX ---
+if "sandbox_success" in st.session_state:
+    st.success(st.session_state.pop("sandbox_success"))
+if "sandbox_error" in st.session_state:
+    st.error(st.session_state.pop("sandbox_error"))
+
 # --- CONEXIÓN DIAGNÓSTICO ---
 redis_online = redis_service.ping()
 
@@ -155,12 +161,12 @@ with col_left:
         with col_btn1:
             if st.button("Marcar como Disponible", use_container_width=True):
                 redis_service.set_disponible(hab_id, True)
-                st.toast("🟢 Habitación marcada como disponible en Redis.")
+                st.session_state["sandbox_success"] = "🟢 Habitación marcada como disponible en Redis."
                 st.rerun()
         with col_btn2:
             if st.button("Marcar como NO Disponible", use_container_width=True):
                 redis_service.set_disponible(hab_id, False)
-                st.toast("🔴 Habitación marcada como NO disponible en Redis.")
+                st.session_state["sandbox_success"] = "🔴 Habitación marcada como NO disponible en Redis."
                 st.rerun()
 
         st.write("")
@@ -171,18 +177,15 @@ with col_left:
             if st.button("🔒 Intentar Adquirir Lock", type="primary", use_container_width=True):
                 exito = redis_service.adquirir_lock(hab_id, usr_id, ttl_segundos=120)
                 if exito:
-                    st.success(f"¡Lock adquirido por 120s para el usuario {usr_id}!")
-                    st.toast("🔒 Lock exitoso.")
+                    st.session_state["sandbox_success"] = f"🔒 ¡Lock adquirido con éxito por 120s para el usuario {usr_id}!"
                 else:
                     owner = redis_service.get_lock_owner(hab_id)
-                    st.error(f"Fallo. Habitación ya bloqueada por {owner}.")
-                    st.toast("❌ Lock rechazado (Overbooking bloqueado)")
+                    st.session_state["sandbox_error"] = f"❌ Fallo de concurrencia: Habitación ya bloqueada en Redis por {owner}."
                 st.rerun()
         with col_btn4:
             if st.button("🔓 Liberar Lock Manual", use_container_width=True):
                 redis_service.liberar_lock(hab_id)
-                st.toast("🔓 Lock liberado en Redis.")
-                st.success("Lock eliminado con éxito.")
+                st.session_state["sandbox_success"] = "🔓 Candado temporal liberado con éxito en Redis."
                 st.rerun()
                 
         # 3. Métricas
@@ -190,7 +193,7 @@ with col_left:
         st.markdown("**Métricas:**")
         if st.button("📈 Incrementar Reservas Hoy (+1)", use_container_width=True):
             redis_service.incrementar_reservas_hoy()
-            st.toast("📈 stats:reservas:hoy incrementado.")
+            st.session_state["sandbox_success"] = "📈 Contador stats:reservas:hoy incrementado exitosamente."
             st.rerun()
 
 
@@ -206,7 +209,7 @@ with col_right:
         if st.button("⚙️ Sincronizar desde MongoDB (Seeding)", use_container_width=True):
             habitaciones_db = list(mongo.col_habitaciones.find({}))
             cantidad = redis_service.seed_from_habitaciones(habitaciones_db)
-            st.success(f"Seeding completado. {cantidad} habitaciones sincronizadas.")
+            st.session_state["sandbox_success"] = f"⚙️ Sincronización completada. {cantidad} habitaciones mapped a Redis."
             st.rerun()
             
     # Traer llaves estructuradas
