@@ -8,8 +8,19 @@ import pandas as pd
 import streamlit as st
 from bson import ObjectId
 from pymongo.errors import PyMongoError, ServerSelectionTimeoutError
+from cassandra.cluster import NoHostAvailable
 
 from mongodb import mongo
+
+from cassandradb.cassandra import (
+    crear_tablas,
+    importar_dataset_json,
+    obtener_hoteles_por_pais,
+    obtener_resenas_por_hotel,
+    obtener_habitaciones_por_hotel,
+    obtener_amenities_por_habitacion,
+    obtener_calificaciones_por_resena
+)
 
 
 DEFAULT_DATASET_PATH = Path(__file__).resolve().parent / "mock_data" / "bemyguest_dataset.json"
@@ -69,10 +80,15 @@ def delete_all_data():
 def import_dataset(dataset_path=DEFAULT_DATASET_PATH):
     def action():
         counts = mongo.importar_dataset_json(dataset_path, reset_first=True)
+        cassandra_counts = importar_dataset_json(dataset_path, reset_first=True)
+
         print(f"Dataset importado desde {dataset_path}")
         print(f"Total registros: {sum(counts.values())}")
         for collection_name, count in counts.items():
             print(f"- {collection_name}: {count}")
+
+        for table_name, count in cassandra_counts.items():
+            print(f"- {table_name}: "f"{count}")
 
     return run_engine_action(action)
 
@@ -391,6 +407,183 @@ def show_dashboard():
     for column, (name, count) in zip(columns, counts.items()):
         column.metric(name, count)
 
+def show_cassandra_queries():
+
+    st.subheader("Consultas Cassandra")
+
+    consulta = st.selectbox(
+        "Seleccionar consulta",
+        [
+            "Hoteles por país",
+            "Reseñas por hotel",
+            "Calificaciones por reseña",
+            "Habitaciones por hotel",
+            "Amenities por habitación",
+        ]
+    )
+
+    if consulta == "Hoteles por país":
+
+        pais = st.text_input("País")
+
+        if st.button("Buscar hoteles"):
+
+            resultados = obtener_hoteles_por_pais(
+                pais
+            )
+
+            if resultados:
+
+                docs = [
+                    dict(row)
+                    for row in resultados
+                ]
+
+                st.dataframe(
+                    pd.DataFrame(docs),
+                    use_container_width=True
+                )
+
+            else:
+
+                st.info(
+                    "No se encontraron resultados."
+                )
+
+    elif consulta == "Reseñas por hotel":
+
+        hotel_id = st.text_input(
+            "Hotel ID"
+        )
+
+        if st.button("Buscar reseñas"):
+
+            resultados = obtener_resenas_por_hotel(
+                hotel_id
+            )
+
+            if resultados:
+
+                docs = [
+                    dict(row)
+                    for row in resultados
+                ]
+
+                st.dataframe(
+                    pd.DataFrame(docs),
+                    use_container_width=True
+                )
+
+            else:
+
+                st.info(
+                    "No se encontraron resultados."
+                )
+    
+    elif consulta == "Calificaciones por reseña":
+
+        hotel_id = st.text_input(
+            "Hotel ID"
+        )
+
+        resena_id = st.text_input(
+            "Reseña ID"
+        )
+
+        if st.button("Buscar calificaciones"):
+
+            resultados = obtener_calificaciones_por_resena(
+                resena_id,
+                hotel_id
+            )
+
+            if resultados:
+
+                docs = [
+                    dict(row)
+                    for row in resultados
+                ]
+
+                st.dataframe(
+                    pd.DataFrame(docs),
+                    use_container_width=True
+                )
+
+            else:
+
+                st.info(
+                    "No se encontraron resultados."
+                )
+
+    elif consulta == "Habitaciones por hotel":
+
+        hotel_id = st.text_input(
+            "Hotel ID"
+        )
+
+        if st.button(
+            "Buscar habitaciones"
+        ):
+
+            resultados = obtener_habitaciones_por_hotel(
+                hotel_id
+            )
+
+            if resultados:
+
+                docs = [
+                    dict(row)
+                    for row in resultados
+                ]
+
+                st.dataframe(
+                    pd.DataFrame(docs),
+                    use_container_width=True
+                )
+
+            else:
+
+                st.info(
+                    "No se encontraron resultados."
+                )
+
+    elif consulta == "Amenities por habitación":
+
+        habitacion_id = st.text_input(
+            "Habitación ID"
+        )
+
+        hotel_id = st.text_input(
+            "Hotel ID"
+        )
+
+        if st.button(
+            "Buscar amenities"
+        ):
+
+            resultados = obtener_amenities_por_habitacion(
+                habitacion_id,
+                hotel_id
+            )
+
+            if resultados:
+
+                docs = [
+                    dict(row)
+                    for row in resultados
+                ]
+
+                st.dataframe(
+                    pd.DataFrame(docs),
+                    use_container_width=True
+                )
+
+            else:
+
+                st.info(
+                    "No se encontraron resultados."
+                )
+
 
 def main():
     st.set_page_config(page_title="BeMyGuest", layout="wide")
@@ -400,9 +593,14 @@ def main():
 
     try:
         ping_database()
+        crear_tablas()
     except ServerSelectionTimeoutError:
         st.error("No se pudo conectar a MongoDB en localhost:27017.")
         st.stop()
+    except NoHostAvailable:
+        st.error("No se pudo conectar a Cassandra en localhost:9042.")
+        st.stop()
+
 
     show_dashboard()
     if "last_success" in st.session_state:
@@ -412,8 +610,14 @@ def main():
         if output:
             st.code(output, language="text")
 
-    explore_tab, create_tab, seed_tab, admin_tab = st.tabs(
-        ["Explorar datos", "Registrar documento", "Cargar datos", "Administrar"]
+    explore_tab, create_tab, seed_tab, cassandra_tab, admin_tab = st.tabs(
+        [
+            "Explorar datos",
+            "Registrar documento",
+            "Cargar datos",
+            "Consultas Cassandra",
+            "Administrar",
+        ]
     )
 
     with explore_tab:
@@ -447,6 +651,9 @@ def main():
                 st.session_state["last_success"] = "Dataset importado correctamente."
                 st.session_state["last_output"] = output
                 st.rerun()
+    
+    with cassandra_tab:
+        show_cassandra_queries()
 
     with admin_tab:
         st.subheader("Mantenimiento")
