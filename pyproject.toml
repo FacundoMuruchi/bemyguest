@@ -8,4 +8,5 @@ dependencies = [
     "faker>=40.18.0",
     "pymongo>=4.17.0",
     "streamlit>=1.57.0",
+    "redis>=5.0.1",
 ]
