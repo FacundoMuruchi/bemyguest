@@ -71,7 +71,6 @@ def construir_entradas(habitaciones: list) -> list[tuple[str, str]]:
 def seed(r: redis.Redis, entries: list[tuple[str, str]], dry_run: bool):
     """Escribe las keys de disponibilidad en Redis usando pipeline para eficiencia."""
     
-    #Imprime en pantalla una vista previa de las llaves y valores que se crearían 
     if dry_run:
         print("\n[DRY-RUN] Keys que se escribirían en Redis:")
         for key, val in entries:
@@ -97,69 +96,75 @@ def seed(r: redis.Redis, entries: list[tuple[str, str]], dry_run: bool):
 
 
 def reset_redis(r: redis.Redis):
-    """Elimina TODAS las keys del dataset BeMyGuest (no hace FLUSHALL)."""
+    """Elimina TODAS las keys en Redis que sean del dataset BeMyGuest."""
     patterns = [
         "habitacion:*:disponible",
         "lock:habitacion:*",
         "sesion:*",
         "stats:reservas:*",
     ]
-    deleted = 0
+    eliminadas = 0
     for pattern in patterns:
         keys = r.keys(pattern)
         if keys:
-            deleted += r.delete(*keys)
-    print(f"[RESET] {deleted} keys eliminadas de Redis.")
+            eliminadas += r.delete(*keys)
+    print(f"[RESET] {eliminadas} keys eliminadas de Redis.")
 
 
 # Main
 
 def main():
+    """
+        Se encarga de procesar los parámetros que ingresas por consola, controlar las conexiones a las bases de datos y mandar a ejecutar las tareas de limpieza y 
+        escritura en Redis.
+    """
+
+    # Se encarga de interpretar los argumentos que le pasamos al script desde la consola.
     parser = argparse.ArgumentParser(description="Seed Redis con datos de BeMyGuest")
     parser.add_argument("--reset",   action="store_true", help="Elimina keys previas antes de cargar")
     parser.add_argument("--dry-run", action="store_true", help="Muestra las keys sin escribirlas")
     parser.add_argument("--fallback", action="store_true", help="Usa dataset ficticio aunque Mongo esté disponible")
     args = parser.parse_args()
 
-    # ── Redis ──────────────────────────────────────────────────────────────────
+    #Validar conexion
     try:
         r = get_redis()
-        print(f"[OK] Redis conectado en {REDIS_HOST}:{REDIS_PORT}")
+        print(f"Redis conectado en {REDIS_HOST}:{REDIS_PORT}")
     except Exception as e:
-        print(f"[ERROR] No se pudo conectar a Redis: {e}")
+        print(f"(ERROR) No se pudo conectar a Redis: {e}")
         sys.exit(1)
 
-    # ── Opcional: reset previo ─────────────────────────────────────────────────
+    # Reset opcional de Redis antes de cargar la data.
     if args.reset and not args.dry_run:
         reset_redis(r)
 
-    # ── Fuente de datos ────────────────────────────────────────────────────────
+    # Fuente de habitaciones (datos)
     habitaciones = []
 
     if not args.fallback:
         try:
             db = get_mongo()
             habitaciones = list(db["habitaciones"].find({}, {"_id": 1, "disponible": 1, "numero": 1, "tipo": 1}))
-            print(f"[OK] MongoDB conectado. {len(habitaciones)} habitaciones encontradas.")
+            print(f"MongoDB conectado. {len(habitaciones)} habitaciones encontradas.")
         except Exception as e:
-            print(f"[WARN] MongoDB no disponible ({e}). Usando dataset de fallback.")
+            print(f"MongoDB no disponible ({e}). Usando dataset de fallback.")
 
     if not habitaciones:
         habitaciones = FALLBACK_HABITACIONES
-        print(f"[INFO] Usando {len(habitaciones)} habitaciones del dataset de fallback.")
+        print(f"Usando {len(habitaciones)} habitaciones del dataset de fallback.")
 
-    # ── Seed ──────────────────────────────────────────────────────────────────
-    entries = construir_entradas(habitaciones)
-    seed(r, entries, dry_run=args.dry_run)
+    # seed
+    entradas = construir_entradas(habitaciones)
+    seed(r, entradas, dry_run=args.dry_run)
 
     if not args.dry_run:
-        # ── Resumen post-seed ──────────────────────────────────────────────────
-        print("\n── Estado en Redis (post-seed) ──────────────────────────────────────")
+        #resumencito de lo que sucedió
+        print("\n-- Estado en Redis --")
         disp = sum(1 for h in habitaciones if h.get("disponible", True))
         no_disp = len(habitaciones) - disp
         print(f"  Habitaciones disponibles   : {disp}")
         print(f"  Habitaciones no disponibles: {no_disp}")
-        print(f"  Total keys de disponibilidad: {len(entries)}")
+        print(f"  Total keys de disponibilidad: {len(entradas)}")
         print(f"  stats:reservas:hoy          : {r.get('stats:reservas:hoy')}")
 
 
