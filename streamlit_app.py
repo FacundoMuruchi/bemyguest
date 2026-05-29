@@ -446,6 +446,20 @@ def main():
             st.session_state["last_output"] = output
             st.rerun()
 
+        st.divider()
+        st.subheader("Cargar dataset externo (Hoteles)")
+        st.info("El archivo JSON debe contener una lista de objetos, idealmente respetando los campos: nombre, ciudad, pais, categoria, servicios y calificacion_promedio.")
+        uploaded_file = st.file_uploader("Subir archivo JSON de hoteles", type=["json"])
+        
+        if st.button("Importar dataset", type="primary"):
+            if uploaded_file is not None:
+                datos_hoteles = json.load(uploaded_file)
+                mongo.insertar_hoteles_desde_lista(datos_hoteles)
+                st.session_state["last_success"] = f"{len(datos_hoteles)} hoteles importados exitosamente desde el archivo."
+                st.rerun()
+            else:
+                st.error("Por favor, subí un archivo JSON primero.")
+
     with admin_tab:
         st.subheader("Mantenimiento")
         selected = st.multiselect(

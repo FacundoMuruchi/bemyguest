@@ -51,8 +51,8 @@ La app de Streamlit puede seguir siendo la interfaz única, pero debería llamar
 
 - **Iniciar reserva**
   - Consultar Redis para verificar disponibilidad.
-  - Bloquear habitación con TTL, por ejemplo `lock:habitacion:{habitacion_id}` durante 10 minutos.
-  - Si ya existe lock, impedir la reserva.
+  <!-- - Bloquear habitación con TTL, por ejemplo `lock:habitacion:{habitacion_id}` durante 10 minutos.
+  - Si ya existe lock, impedir la reserva. --> Si estamos manejando un único usuario, es necesario esto? o debemos pensarlo para múltiples usuarios?.
 
 - **Confirmar reserva**
   - Validar que el lock sigue vigente.
