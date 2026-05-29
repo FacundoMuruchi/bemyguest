@@ -79,9 +79,12 @@ def seed(r: redis.Redis, entries: list[tuple[str, str]], dry_run: bool):
         print(f"\nTotal: {len(entries)} keys")
         return
 
-    #Si no es una simulación, crea un Pipeline
-    #En lugar de enviar un comando a la base de datos por cada habitación (muchos idas y vueltas en la red), 
-    # el Pipeline acumula todos los comandos SET en memoria local.
+    # 1. Limpiamos todas las llaves de disponibilidad viejas para no dejar huérfanas
+    llaves_viejas = r.keys("habitacion:*:disponible")
+    if llaves_viejas:
+        r.delete(*llaves_viejas)
+
+    # 2. Si no es una simulación, crea un Pipeline
     pipe = r.pipeline()
     for key, val in entries:
         pipe.set(key, val)

@@ -112,6 +112,12 @@ def seed_from_habitaciones(habitaciones: list) -> int:
     Llena en batch las llaves de disponibilidad en Redis
     Retorna la cantidad de habitaciones cargadas exitosamente
     """
+    # 1. Limpiamos todas las llaves de disponibilidad viejas para no dejar huérfanas
+    llaves_viejas = r.keys("habitacion:*:disponible")
+    if llaves_viejas:
+        r.delete(*llaves_viejas)
+
+    # 2. Guardamos las nuevas llaves en lote
     pipe = r.pipeline()
     for hab in habitaciones:
         key = f"habitacion:{str(hab['_id'])}:disponible"

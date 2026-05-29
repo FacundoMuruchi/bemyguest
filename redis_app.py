@@ -1,7 +1,5 @@
 # redis_app.py
 """
-redis_app.py — BeMyGuest
-========================
 Aplicación Streamlit complementaria que funciona como un "Redis Sandbox".
 Permite visualizar llaves en tiempo real, auditar TTLs, simular concurrencia,
 y gestionar bloqueos atómicos de forma visual e interactiva.
