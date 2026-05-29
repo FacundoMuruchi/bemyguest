@@ -1,13 +1,12 @@
 # redis_service/redis_service.py
 """
 Capa de abstracción que centraliza las operaciones del cliente de Redis.
-Evita el acoplamiento directo entre la interfaz de UI y el motor en memoria.
+Evita el acoplamiento directo entre la interfa de ui y el motor en memoria.
 """
 
 import os
 import redis
 
-# Conexión directa y global al cliente de Redis
 r = redis.Redis(
     host=os.getenv("REDIS_HOST", "localhost"),
     port=int(os.getenv("REDIS_PORT", 6379)),
@@ -23,7 +22,7 @@ def ping() -> bool:
         return False
 
 
-# ── DISPONIBILIDAD DE HABITACIONES ────────────────────────────────────────────
+# Disponibilidad de habitaciones
 
 def set_disponible(habitacion_id: str, disponible: bool):
     """
@@ -38,7 +37,7 @@ def set_disponible(habitacion_id: str, disponible: bool):
 def is_disponible(habitacion_id: str) -> bool:
     """
     Consulta la disponibilidad de una habitación en Redis.
-    Retorna True solo si la llave existe y tiene el valor "1".
+    Retorna true solo si la llave existe y tiene el valor "1".
     """
     try:
         val = r.get(f"habitacion:{habitacion_id}:disponible")
@@ -47,7 +46,7 @@ def is_disponible(habitacion_id: str) -> bool:
         return False
 
 
-# ── LOCKING ATÓMICO (ANTI-OVERBOOKING) ────────────────────────────────────────
+# Locking atómico para evitar overbooking
 
 def adquirir_lock(habitacion_id: str, usuario_id: str, ttl_segundos: int = 600) -> bool:
     """
@@ -58,7 +57,16 @@ def adquirir_lock(habitacion_id: str, usuario_id: str, ttl_segundos: int = 600) 
     Retorna True si el lock fue adquirido con éxito, False si ya estaba bloqueada.
     """
     key = f"lock:habitacion:{habitacion_id}"
-    # set() con nx=True retorna True si crea la llave, None si ya existe
+    
+    #nx=True Le dice a Redis: "Crea esta llave únicamente si NO existe todavía"
+    #Como Redis es mono-hilo, si la petición de A llega una millonésima de segundo antes que de B, Redis creará
+    #  la llave para A y devolverá True. Cuando llegue la petición de B, la llave ya existirá,
+    #  por lo que Redis rechazará la creación y devolverá None
+
+    #ex=ttl_segundos:
+    #la llave se autoeliminará de la memoria a los 10 minutos, liberando el bloqueo 
+    # incluso si el proceso que lo adquirió falla o se queda colgado.
+
     exito = r.set(key, usuario_id, nx=True, ex=ttl_segundos)
     return bool(exito)
 
@@ -70,18 +78,18 @@ def liberar_lock(habitacion_id: str):
 
 def get_lock_owner(habitacion_id: str) -> str | None:
     """
-    Retorna el usuario_id (string) que posee actualmente el bloqueo sobre la habitación.
+    Retorna el usuario_id que posee actualmente el bloqueo sobre la habitación.
     Retorna None si la habitación no está bloqueada.
     """
     return r.get(f"lock:habitacion:{habitacion_id}")
 
 
-# ── MÉTRICAS DE NEGOCIO (CONTADORES RÁPIDOS) ──────────────────────────────────
+# Contadores    
 
 def incrementar_reservas_hoy():
     """
-    Incrementa atómicamente el contador de reservas exitosas diarias en Redis.
-    Configura una expiración de 24 horas (86400s) si es una nueva métrica.
+    Incrementa atómicamente el contador de reservas exitosas diarias en Redis
+    Configura una expiración de 24 horas si es una métrica nueva 
     """
     key = "stats:reservas:hoy"
     r.incr(key)
@@ -97,12 +105,12 @@ def get_reservas_hoy() -> int:
         return 0
 
 
-# ── SEEDING DESDE FRONTEND ───────────────────────────────────────────────────
+# Seeding frontend
 
 def seed_from_habitaciones(habitaciones: list) -> int:
     """
-    Puebla en lote (Pipeline) las llaves de disponibilidad en Redis.
-    Retorna la cantidad de habitaciones cargadas exitosamente.
+    Llena en batch las llaves de disponibilidad en Redis
+    Retorna la cantidad de habitaciones cargadas exitosamente
     """
     pipe = r.pipeline()
     for hab in habitaciones:
@@ -110,7 +118,7 @@ def seed_from_habitaciones(habitaciones: list) -> int:
         value = "1" if hab.get("disponible", True) else "0"
         pipe.set(key, value)
     
-    # Aseguramos que la métrica de reservas diarias esté inicializada
+    # metrica de reservas diarias inicializadas
     pipe.setnx("stats:reservas:hoy", "0")
     pipe.expire("stats:reservas:hoy", 86400)
     

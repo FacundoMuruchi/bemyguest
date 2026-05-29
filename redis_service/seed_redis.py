@@ -72,7 +72,7 @@ def seed(r: redis.Redis, entries: list[tuple[str, str]], dry_run: bool):
     """Escribe las keys de disponibilidad en Redis usando pipeline para eficiencia."""
     
     if dry_run:
-        print("\n[DRY-RUN] Keys que se escribirían en Redis:")
+        print("\n(DRY-RUN) Keys que se escribirían en Redis:")
         for key, val in entries:
             estado = "disponible" if val == "1" else "no disponible"
             print(f"  SET {key!r:60s} -> {val}  ({estado})")
@@ -108,7 +108,7 @@ def reset_redis(r: redis.Redis):
         keys = r.keys(pattern)
         if keys:
             eliminadas += r.delete(*keys)
-    print(f"[RESET] {eliminadas} keys eliminadas de Redis.")
+    print(f"(RESET) {eliminadas} keys eliminadas de Redis.")
 
 
 # Main
