@@ -1,13 +1,11 @@
 """
-seed_redis.py — BeMyGuest
-=========================
 Pobla Redis con el estado de disponibilidad de las habitaciones
 leyendo los documentos reales de MongoDB.
 
 Uso:
     uv run redis_service/seed_redis.py
-    uv run redis_service/seed_redis.py --reset      # limpia Redis antes de cargar
-    uv run redis_service/seed_redis.py --dry-run    # muestra las keys sin escribir
+    uv run redis_service/seed_redis.py --reset  # limpia Redis antes de cargar
+    uv run redis_service/seed_redis.py --dry-run  # muestra las keys sin escribir
 """
 
 import argparse
@@ -17,17 +15,17 @@ import sys
 import redis
 from pymongo import MongoClient
 
-# ── Conexión ──────────────────────────────────────────────────────────────────
+# Conexión
 
-MONGO_URI   = os.getenv("MONGO_URI",   "mongodb://localhost:27017")
-REDIS_HOST  = os.getenv("REDIS_HOST",  "localhost")
-REDIS_PORT  = int(os.getenv("REDIS_PORT", 6379))
-DB_NAME     = "bemyguest"
+MONGO_URI= os.getenv("MONGO_URI",   "mongodb://localhost:27017")
+REDIS_HOST= os.getenv("REDIS_HOST",  "localhost")
+REDIS_PORT= int(os.getenv("REDIS_PORT", 6379))
+DB_NAME= "bemyguest"
 
 
 def get_mongo():
     client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000)
-    client.admin.command("ping")           # falla rápido si no hay conexión
+    client.admin.command("ping")# falla rápido si no hay conexión
     return client[DB_NAME]
 
 
@@ -37,9 +35,8 @@ def get_redis():
     return r
 
 
-# ── Dataset de fallback (sin Mongo) ──────────────────────────────────────────
-# IDs ficticios con formato ObjectId (24 hex). Útiles para pruebas unitarias
-# cuando MongoDB no está disponible.
+# Dataset de fallback (sin mongo)
+# Útiles para pruebas unitarias cuando mongo no está disponible.
 
 FALLBACK_HABITACIONES = [
     {"_id": "aaa000000000000000000001", "numero": "101", "tipo": "estandar",  "disponible": True},
@@ -53,38 +50,50 @@ FALLBACK_HABITACIONES = [
 ]
 
 
-# ── Lógica de seeding ─────────────────────────────────────────────────────────
+# Lógica de seeding 
 
-def build_entries(habitaciones: list) -> list[tuple[str, str]]:
-    """Devuelve lista de (key, value) para disponibilidad."""
+def construir_entradas(habitaciones: list) -> list[tuple[str, str]]:
+    """Devuelve lista de (key, value) para disponibilidad.
+
+    La key sigue el formato: habitacion:{id}:disponible
+    El value es "1" para disponible y "0" para no disponible.
+    """
     entries = []
+
+    #Cada diccionario representa una habitación traída de MongoDB o del dataset de fallback.
     for h in habitaciones:
         hab_id = str(h["_id"])
-        value  = "1" if h.get("disponible", True) else "0"
-        entries.append((f"habitacion:{hab_id}:disponible", value))
+        valor  = "1" if h.get("disponible", True) else "0"
+        entries.append((f"habitacion:{hab_id}:disponible", valor))
     return entries
 
 
 def seed(r: redis.Redis, entries: list[tuple[str, str]], dry_run: bool):
+    """Escribe las keys de disponibilidad en Redis usando pipeline para eficiencia."""
+    
+    #Imprime en pantalla una vista previa de las llaves y valores que se crearían 
     if dry_run:
         print("\n[DRY-RUN] Keys que se escribirían en Redis:")
         for key, val in entries:
             estado = "disponible" if val == "1" else "no disponible"
-            print(f"  SET {key!r:60s} → {val}  ({estado})")
+            print(f"  SET {key!r:60s} -> {val}  ({estado})")
         print(f"\nTotal: {len(entries)} keys")
         return
 
+    #Si no es una simulación, crea un Pipeline
+    #En lugar de enviar un comando a la base de datos por cada habitación (muchos idas y vueltas en la red), 
+    # el Pipeline acumula todos los comandos SET en memoria local.
     pipe = r.pipeline()
     for key, val in entries:
         pipe.set(key, val)
 
     # Inicializar contador de reservas de hoy si no existe
     pipe.setnx("stats:reservas:hoy", "0")
-    pipe.expire("stats:reservas:hoy", 86400)
+    pipe.expire("stats:reservas:hoy", 86400) # Expira en 24 horas
 
     pipe.execute()
-    print(f"✅  {len(entries)} keys de disponibilidad cargadas en Redis.")
-    print(f"✅  stats:reservas:hoy inicializado.")
+    print(f"{len(entries)} keys de disponibilidad cargadas en Redis.")
+    print(f"stats:reservas:hoy inicializado.")
 
 
 def reset_redis(r: redis.Redis):
@@ -100,10 +109,10 @@ def reset_redis(r: redis.Redis):
         keys = r.keys(pattern)
         if keys:
             deleted += r.delete(*keys)
-    print(f"🗑️   {deleted} keys eliminadas de Redis.")
+    print(f"[RESET] {deleted} keys eliminadas de Redis.")
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# Main
 
 def main():
     parser = argparse.ArgumentParser(description="Seed Redis con datos de BeMyGuest")
@@ -115,9 +124,9 @@ def main():
     # ── Redis ──────────────────────────────────────────────────────────────────
     try:
         r = get_redis()
-        print(f"✅  Redis conectado en {REDIS_HOST}:{REDIS_PORT}")
+        print(f"[OK] Redis conectado en {REDIS_HOST}:{REDIS_PORT}")
     except Exception as e:
-        print(f"❌  No se pudo conectar a Redis: {e}")
+        print(f"[ERROR] No se pudo conectar a Redis: {e}")
         sys.exit(1)
 
     # ── Opcional: reset previo ─────────────────────────────────────────────────
@@ -131,16 +140,16 @@ def main():
         try:
             db = get_mongo()
             habitaciones = list(db["habitaciones"].find({}, {"_id": 1, "disponible": 1, "numero": 1, "tipo": 1}))
-            print(f"✅  MongoDB conectado. {len(habitaciones)} habitaciones encontradas.")
+            print(f"[OK] MongoDB conectado. {len(habitaciones)} habitaciones encontradas.")
         except Exception as e:
-            print(f"⚠️   MongoDB no disponible ({e}). Usando dataset de fallback.")
+            print(f"[WARN] MongoDB no disponible ({e}). Usando dataset de fallback.")
 
     if not habitaciones:
         habitaciones = FALLBACK_HABITACIONES
-        print(f"ℹ️   Usando {len(habitaciones)} habitaciones del dataset de fallback.")
+        print(f"[INFO] Usando {len(habitaciones)} habitaciones del dataset de fallback.")
 
     # ── Seed ──────────────────────────────────────────────────────────────────
-    entries = build_entries(habitaciones)
+    entries = construir_entradas(habitaciones)
     seed(r, entries, dry_run=args.dry_run)
 
     if not args.dry_run:
