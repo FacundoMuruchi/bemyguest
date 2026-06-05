@@ -17,6 +17,9 @@ Detalle del motor principal operacional: esquemas de documentos (flexibles), con
 ### 3. [⚡ Módulo Redis Service (`modulo_redis.md`)](./modulo_redis.md)
 Detalla el plan técnico para la gestión de disponibilidad en tiempo real, bloqueos atómicos temporales (anti-overbooking) y el script de población inicial (*seeding*).
 
+### 📊 [Estructura y Modelo de Datos de Redis (`modelo_datos_redis.md`)](./modelo_datos_redis.md)
+Especifica el diseño llave-valor (Key-Value Schema), los tipos de datos utilizados (Strings, Hashes, Counters), políticas de expiración (TTL) y el diagrama de flujo operativo en memoria.
+
 ### 4. [🛠️ Módulo de Scripts y Dataset (`modulo_scripts.md`)](./modulo_scripts.md)
 Detalla el generador de mock data estático y determinista de más de 1,500 registros y la herramienta CLI para importación rápida.
 
