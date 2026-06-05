@@ -22,6 +22,7 @@ from cassandradb.cassandra import (
     obtener_amenities_por_habitacion,
     obtener_calificaciones_por_resena
 )
+from redis_service import redis_service
 
 
 DEFAULT_DATASET_PATH = Path(__file__).resolve().parent / "mock_data" / "bemyguest_dataset.json"
@@ -104,8 +105,24 @@ def hotel_label(hotel):
     return f"{hotel.get('nombre', 'Hotel sin nombre')} | {hotel.get('ciudad', 'Sin ciudad')}, {hotel.get('pais', 'Sin país')}"
 
 
+def get_habitacion_disponibilidad(habitacion):
+    hab_id = str(habitacion["_id"])
+    try:
+        if redis_service.ping():
+            return redis_service.is_disponible(hab_id)
+    except Exception:
+        pass
+    return habitacion.get("disponible", False)
+
+
 def room_label(habitacion):
-    estado = "disponible" if habitacion.get("disponible") else "no disponible"
+    disponible = get_habitacion_disponibilidad(habitacion)
+    estado = "disponible" if disponible else "no disponible"
+    try:
+        if redis_service.ping() and redis_service.get_lock_owner(str(habitacion["_id"])):
+            estado = "BLOQUEADA (Reservando...)"
+    except Exception:
+        pass
     return f"Habitación {habitacion.get('numero', 's/n')} | {habitacion.get('tipo', 'sin tipo')} | {estado}"
 
 
@@ -249,6 +266,72 @@ def show_booking_form():
     if not usuarios or not habitaciones:
         st.info("Primero registrá usuarios y habitaciones para poder crear una reserva.")
         return
+    # Verificar si Redis está online
+    redis_online = False
+    try:
+        redis_online = redis_service.ping()
+    except Exception:
+        pass
+
+    # Si Redis está online y hay un bloqueo activo en esta sesión
+    if redis_online and st.session_state.get("lock_activo"):
+        lock_hab_id = st.session_state.get("lock_activo")
+        lock_usr_id = st.session_state.get("lock_usuario_id")
+        pending_booking = st.session_state.get("pending_booking")
+
+        # Buscar usuario y habitación para mostrar detalles amigables
+        usr_doc = mongo.col_usuarios.find_one({"_id": ObjectId(lock_usr_id)})
+        hab_doc = mongo.col_habitaciones.find_one({"_id": ObjectId(lock_hab_id)})
+
+        st.warning(f"⚠️ **Habitación Temporalmente Bloqueada en Redis**")
+        st.info(
+            f"El usuario **{usr_doc.get('nombre')} {usr_doc.get('apellido')}** está en proceso de reserva "
+            f"de la **Habitación {hab_doc.get('numero')} ({hab_doc.get('tipo')})**.\n\n"
+            f"Esta habitación está reservada exclusivamente en Redis con un **TTL de 10 minutos**. "
+            f"Si no completás la confirmación, se liberará automáticamente."
+        )
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Confirmar Pago y Registrar Reserva", type="primary", use_container_width=True):
+                # Validar que el lock sigue siendo nuestro en Redis
+                owner = redis_service.get_lock_owner(lock_hab_id)
+                if owner == lock_usr_id:
+                    # 1. Guardar reserva en MongoDB
+                    inserted = mongo.col_reservas.insert_one(pending_booking)
+
+                    # 2. Actualizar estado de habitación en MongoDB
+                    mongo.col_habitaciones.update_one({"_id": ObjectId(lock_hab_id)}, {"$set": {"disponible": False}})
+
+                    # 3. Actualizar Redis (marcar no disponible y liberar el lock)
+                    redis_service.set_disponible(lock_hab_id, False)
+                    redis_service.liberar_lock(lock_hab_id)
+                    redis_service.incrementar_reservas_hoy()
+
+                    # 4. Limpiar session state
+                    st.session_state.pop("lock_activo")
+                    st.session_state.pop("lock_usuario_id")
+                    st.session_state.pop("pending_booking")
+                    st.session_state["last_success"] = f"Reserva registrada correctamente en MongoDB y confirmada con Redis con _id {inserted.inserted_id}."
+                    st.rerun()
+                else:
+                    st.error("❌ El bloqueo de Redis expiró o ya no te pertenece. Por favor iniciá el proceso de nuevo.")
+                    st.session_state.pop("lock_activo")
+                    st.session_state.pop("lock_usuario_id")
+                    st.session_state.pop("pending_booking")
+                    st.rerun()
+
+        with col2:
+            if st.button("Cancelar Reserva (Liberar Lock)", type="secondary", use_container_width=True):
+                redis_service.liberar_lock(lock_hab_id)
+                st.session_state.pop("lock_activo")
+                st.session_state.pop("lock_usuario_id")
+                st.session_state.pop("pending_booking")
+                st.toast("🔓 Habitación liberada en Redis.")
+                st.rerun()
+        return
+
+    # Flujo de selección (Formulario Normal)
     with st.form("create_booking_form", clear_on_submit=True):
         col_a, col_b = st.columns(2)
         usuario = col_a.selectbox("Usuario", usuarios, format_func=user_label)
@@ -263,7 +346,8 @@ def show_booking_form():
         servicios_extra = col_g.multiselect("Servicios extra", EXTRA_SERVICE_OPTIONS)
         fecha_reserva = st.date_input("Fecha de reserva", value=date.today())
         raw_extra_attributes = show_extra_attributes_help()
-        if st.form_submit_button("Registrar reserva", type="primary"):
+        submit_text = "Iniciar Reserva (Bloquear en Redis)" if redis_online else "Registrar Reserva (Modo Directo)"
+        if st.form_submit_button(submit_text, type="primary"):
             noches = (check_out - check_in).days
             if noches <= 0:
                 st.error("La fecha de check-out debe ser posterior al check-in.")
@@ -276,8 +360,35 @@ def show_booking_form():
                 return
             document = {"usuario_id": usuario["_id"], "habitacion_id": habitacion["_id"], "hotel_id": habitacion["hotel_id"], "check_in": check_in.isoformat(), "check_out": check_out.isoformat(), "noches": noches, "huespedes": huespedes, "estado": estado, "servicios_extra": servicios_extra, "fecha_reserva": fecha_reserva.isoformat()}
             document = merge_extra_attributes(document, raw_extra_attributes)
-            if document is not None:
+            if document is None:
+                return
+
+            habitacion_id = str(habitacion["_id"])
+            usuario_id = str(usuario["_id"])
+
+            if redis_online:
+                # 1. Verificar disponibilidad en tiempo real
+                if not redis_service.is_disponible(habitacion_id):
+                    st.error("❌ La habitación seleccionada ya no está disponible en Redis.")
+                    return
+
+                # 2. Intentar adquirir bloqueo temporal
+                if redis_service.adquirir_lock(habitacion_id, usuario_id):
+                    st.session_state["lock_activo"] = habitacion_id
+                    st.session_state["lock_usuario_id"] = usuario_id
+                    st.session_state["pending_booking"] = document
+                    st.toast("🔒 Habitación bloqueada temporalmente en Redis por 10 minutos.")
+                    st.rerun()
+                else:
+                    st.error(f"❌ La habitación está siendo reservada por otro usuario (Lock activo en Redis).")
+            else:
+                # Fallback degradado directo a MongoDB
+                if not habitacion.get("disponible", False):
+                    st.error("❌ La habitación seleccionada no está disponible.")
+                    return
                 save_document(mongo.col_reservas, document)
+                mongo.col_habitaciones.update_one({"_id": habitacion["_id"]}, {"$set": {"disponible": False}})
+                st.toast("🎉 Reserva registrada en MongoDB (modo directo sin Redis).")
 
 
 def show_review_form():
@@ -309,6 +420,47 @@ def show_manual_registration():
     collection_name = st.selectbox("Colección a registrar", list(COLLECTIONS.keys()), key="create_collection_name")
     form_renderers = {"Usuarios": show_user_form, "Hoteles": show_hotel_form, "Habitaciones": show_room_form, "Reservas": show_booking_form, "Reseñas": show_review_form}
     form_renderers[collection_name]()
+
+
+def show_sidebar():
+    with st.sidebar:
+        st.title("🔌 Motores NoSQL")
+        
+        # --- MongoDB Connection Status ---
+        try:
+            mongo.client.admin.command("ping")
+            st.success("🟢 MongoDB: Conectado")
+        except Exception:
+            st.error("🔴 MongoDB: Desconectado")
+            
+        # --- Redis Connection Status ---
+        redis_online = False
+        try:
+            if redis_service.ping():
+                st.success("🟢 Redis: Conectado")
+                redis_online = True
+            else:
+                st.error("🔴 Redis: Desconectado")
+        except Exception:
+            st.error("🔴 Redis: Desconectado")
+            
+        st.divider()
+        
+        # --- Redis Metrics and Operations ---
+        if redis_online:
+            st.subheader("⚡ Métricas de Redis")
+            reservas_hoy = redis_service.get_reservas_hoy()
+            st.metric("Reservas registradas hoy", reservas_hoy)
+            
+            st.subheader("⚙️ Mantenimiento")
+            if st.button("Sincronizar disponibilidad → Redis", use_container_width=True):
+                habitaciones = list(mongo.col_habitaciones.find({}))
+                cantidad = redis_service.seed_from_habitaciones(habitaciones)
+                st.toast(f"✅ {cantidad} habitaciones sincronizadas en Redis!")
+                st.success(f"Sincronizadas {cantidad} habitaciones.")
+                st.rerun()
+        else:
+            st.warning("⚠️ Funciones de Redis desactivadas. El sistema opera en modo degradado directo a MongoDB.")
 
 
 def show_dashboard():
@@ -547,6 +699,7 @@ def main():
         st.stop()
 
 
+    show_sidebar()
     show_dashboard()
     if "last_success" in st.session_state:
         st.success(st.session_state.pop("last_success"))
@@ -606,6 +759,20 @@ def main():
 
     with neo4j_seed_tab:
         show_neo4j_seed_section()
+
+        st.divider()
+        st.subheader("Cargar dataset externo (Hoteles)")
+        st.info("El archivo JSON debe contener una lista de objetos, idealmente respetando los campos: nombre, ciudad, pais, categoria, servicios y calificacion_promedio.")
+        uploaded_file = st.file_uploader("Subir archivo JSON de hoteles", type=["json"])
+        
+        if st.button("Importar dataset", type="primary"):
+            if uploaded_file is not None:
+                datos_hoteles = json.load(uploaded_file)
+                mongo.insertar_hoteles_desde_lista(datos_hoteles)
+                st.session_state["last_success"] = f"{len(datos_hoteles)} hoteles importados exitosamente desde el archivo."
+                st.rerun()
+            else:
+                st.error("Por favor, subí un archivo JSON primero.")
 
     with admin_tab:
         st.subheader("Mantenimiento")
