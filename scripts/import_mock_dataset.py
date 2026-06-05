@@ -35,7 +35,20 @@ def main():
 
     try:
         mongo.client.admin.command("ping")
-        counts = mongo.importar_dataset_json(dataset_path, reset_first=True)
+        dataset = mongo.cargar_dataset_json(dataset_path)
+        counts = mongo.validar_dataset(dataset)
+        
+        # Eliminar 'disponible' de todas las habitaciones
+        for habitacion in dataset["habitaciones"]:
+            habitacion.pop("disponible", None)
+        
+        # Reset y insertar
+        for collection in mongo.DATASET_COLLECTIONS.values():
+            mongo.eliminar_todos_documentos(collection)
+        
+        for key, collection in mongo.DATASET_COLLECTIONS.items():
+            collection.insert_many(dataset[key])
+            
     except FileNotFoundError:
         print(f"No se encontro el dataset: {dataset_path}", file=sys.stderr)
         return 1
