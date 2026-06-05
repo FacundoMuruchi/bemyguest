@@ -12,4 +12,5 @@ dependencies = [
     "pymongo>=4.17.0",
     "streamlit>=1.57.0",
     "redis>=5.0.1",
+    "pyasyncore>=1.0.5",
 ]
