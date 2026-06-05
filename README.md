@@ -14,8 +14,8 @@ El sistema demuestra cómo resolver las distintas necesidades de negocio (catál
 | :--- | :--- | :--- |
 | **🗄️ MongoDB** | **Fuente Única de Verdad (operacional)** | Esquema flexible (JSON/BSON) para almacenar perfiles de habitaciones con amenities muy variables y datos operacionales principales. | **Implementado** |
 | **⚡ Redis** | **Cache de disponibilidad y Concurrencia** | Gestión en memoria RAM con expiración de claves (TTL) para bloqueos temporales de habitación (*pessimistic locking*) y anti-overbooking. | **Implementado** |
-| **🕸️ Neo4j** | **Relaciones y Recomendaciones** | Modelado en grafo de usuarios, hoteles y categorías para filtros colaborativos en tiempo real. | *Próxima Fase* |
-| **📊 Cassandra** | **Logs históricos y Auditoría masiva** | Motor orientado a columnas optimizado para alta tasa de escritura de eventos de actividad e historial inmutable. | *Próxima Fase* |
+| **🕸️ Neo4j** | **Relaciones y Recomendaciones** | Modelado en grafo de usuarios, hoteles y categorías para filtros colaborativos en tiempo real. | **Implementado** |
+| **📊 Cassandra** | **Consultas Optimizadas** | Motor orientado a columnas optimizado para consultas rápidas precalculadas (Query-Driven Design). | **Implementado** |
 
 ---
 
@@ -31,6 +31,18 @@ Asegúrate de tener MongoDB levantado en su puerto estándar.
 Si usas **Docker Desktop**, puedes levantarlo en un segundo con:
 ```bash
 docker run -d --name redis-bemyguest -p 6379:6379 redis:alpine
+```
+
+#### Cassandra (Puerto `9042`)
+Para las consultas optimizadas en columnas, levanta un nodo con:
+```bash
+docker run --name cassandra-bemyguest -p 9042:9042 -d cassandra:latest
+```
+
+#### Neo4j (Puertos `7687` y `7474`)
+Para el motor de recomendaciones basado en grafos:
+```bash
+docker run --name neo4j-bemyguest -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=none -d neo4j:latest
 ```
 
 ### 2. Instalar Dependencias
@@ -71,6 +83,8 @@ uv run streamlit run streamlit_app.py
 * **`documentacion/`**: Carpeta dedicada que contiene la documentación técnica estructurada por versiones.
 * **`mongodb/`**: Configuración de PyMongo y capas operacionales CRUD.
 * **`redis_service/`**: Capa del servicio de Redis (`redis_service.py`), plano técnico (`plan_redis.md`) y cargador inicial (`seed_redis.py`).
+* **`cassandradb/`**: Modelos (`models.py`), configuración e integración de Cassandra mediante `cassandra.cqlengine`.
+* **`implementacion_neo4j/`**: Servicio de ingesta y validación para las recomendaciones en grafos.
 * **`mock_data/`**: Almacena el dataset estático consolidado `bemyguest_dataset.json`.
 * **`scripts/`**: Utilidades CLI para generación e importación reproducible de datos de prueba.
 * **`streamlit_app.py`**: Interfaz de usuario interactiva y panel de administración unificado.
