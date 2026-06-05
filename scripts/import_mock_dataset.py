@@ -13,7 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from mongodb import mongo
 
 
-DEFAULT_DATASET_PATH = PROJECT_ROOT / "mock_data" / "bemyguest_dataset.json"
+DEFAULT_DATASET_PATH = PROJECT_ROOT / "mock_data" / "bemyguest_dataset_v1.json"
 
 
 def parse_args():
