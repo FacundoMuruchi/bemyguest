@@ -121,6 +121,29 @@ def merge_extra_attributes(document, raw_extra_attributes):
 
 def save_document(collection, document):
     inserted = collection.insert_one(document)
+    doc_id = str(inserted.inserted_id)
+
+    # Sincronizar con Neo4j si es usuario u hotel
+    if ping_neo4j():
+        driver = neo4j_service.get_driver()
+        if collection == mongo.col_usuarios:
+            neo4j_service.crear_usuario(
+                driver,
+                doc_id,
+                document.get("nombre", ""),
+                document.get("apellido", ""),
+            )
+        elif collection == mongo.col_hoteles:
+            neo4j_service.crear_hotel(
+                driver,
+                doc_id,
+                document.get("nombre", ""),
+                document.get("ciudad", ""),
+                document.get("pais", ""),
+                document.get("categoria", 0),
+            )
+        driver.close()
+
     st.session_state["last_success"] = f"Documento registrado correctamente con _id {inserted.inserted_id}."
     st.rerun()
 
@@ -313,13 +336,76 @@ def ping_neo4j():
 
 def show_neo4j_tab():
     st.subheader("Recomendaciones de hoteles")
+
     neo4j_ok = ping_neo4j()
     if not neo4j_ok:
         st.error("No se pudo conectar a Neo4j. Verificá que esté corriendo en bolt://localhost:7687.")
         return
     st.success("Neo4j conectado ✅")
-    st.info("Las queries de recomendaciones están en desarrollo.")
 
+    # Estadísticas del grafo
+    driver = neo4j_service.get_driver()
+    stats = neo4j_service.estadisticas_grafo(driver)
+    cols = st.columns(len(stats))
+    for col, (key, val) in zip(cols, stats.items()):
+        col.metric(key.capitalize(), val)
+
+    st.divider()
+
+    # Selección de usuario
+    usuarios = load_docs(mongo.col_usuarios)
+    if not usuarios:
+        st.info("No hay usuarios cargados.")
+        driver.close()
+        return
+
+    usuario = st.selectbox("Seleccioná un usuario", usuarios, format_func=user_label)
+    usuario_id = str(usuario["_id"])
+
+    st.divider()
+
+    # Recomendaciones
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "Por reservas",
+        "Por calificaciones", 
+        "Hoteles populares",
+        "Usuarios similares",
+    ])
+
+    with tab1:
+        st.caption("Hoteles reservados por usuarios con historial similar al tuyo.")
+        resultados = neo4j_service.recomendar_por_reservas(driver, usuario_id)
+        if resultados:
+            st.dataframe(pd.DataFrame(resultados), use_container_width=True, hide_index=True)
+        else:
+            st.info("No hay recomendaciones por reservas para este usuario.")
+
+    with tab2:
+        st.caption("Hoteles bien calificados por usuarios con gustos similares.")
+        resultados = neo4j_service.recomendar_por_calificaciones(driver, usuario_id)
+        if resultados:
+            st.dataframe(pd.DataFrame(resultados), use_container_width=True, hide_index=True)
+        else:
+            st.info("No hay recomendaciones por calificaciones para este usuario.")
+
+    with tab3:
+        st.caption("Hoteles con más reservas en toda la plataforma.")
+        limite = st.slider("Cantidad", min_value=5, max_value=20, value=10)
+        resultados = neo4j_service.hoteles_mas_populares(driver, limite)
+        if resultados:
+            st.dataframe(pd.DataFrame(resultados), use_container_width=True, hide_index=True)
+        else:
+            st.info("No hay datos de popularidad.")
+
+    with tab4:
+        st.caption("Usuarios que reservaron hoteles en común con vos.")
+        resultados = neo4j_service.usuarios_similares(driver, usuario_id)
+        if resultados:
+            st.dataframe(pd.DataFrame(resultados), use_container_width=True, hide_index=True)
+        else:
+            st.info("No hay usuarios similares para este usuario.")
+
+    driver.close()
 
 def show_neo4j_seed_section():
     st.subheader("Importar dataset a Neo4j")
