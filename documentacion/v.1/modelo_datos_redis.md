@@ -15,7 +15,7 @@ $$\text{contexto} : \text{entidad} : \{\text{id}\} : \text{atributo}$$
 
 ---
 
-## 📊 Estructura de Datos (Schema Blueprint)
+## 📊 Estructura de Datos
 
 A continuación, se detalla el modelo de datos activo en Redis:
 
@@ -28,15 +28,7 @@ A continuación, se detalla el modelo de datos activo en Redis:
 
 ---
 
-## 🎨 Representación Gráfica del Modelo
-
-Para facilitar la comprensión visual de cómo se organizan las llaves en la memoria de Redis, se diseñó el siguiente esquema gráfico del modelo:
-
-![Esquema de Datos en Redis](./esquema_redis.png)
-
----
-
-## 🕸️ Diagrama de Flujo y Relaciones (Mermaid)
+## 🕸️ Diagrama de Flujo y Relaciones
 
 El siguiente diagrama ilustra cómo interactúan las diferentes llaves durante el ciclo de vida de una reserva en la base de datos:
 
@@ -60,15 +52,3 @@ graph TD
 ```
 
 ---
-
-## 💡 Consideraciones del Modelado para la Defensa (TPI)
-
-> [!IMPORTANT]
-> **Elección de Estructuras**:
-> * **Strings**: Utilizados para la disponibilidad y el lock por su simplicidad y compatibilidad con operaciones atómicas rápidas (`SETNX`).
-> * **Hashes**: Elegidos para la sesión porque permiten almacenar y actualizar campos individuales de un objeto estructurado (como el rol o la última actividad) sin tener que serializar/deserializar todo el valor.
-> * **Counters**: Usan el comando `INCR` de Redis, garantizando incrementos atómicos sin condiciones de carrera.
-
-> [!TIP]
-> **Persistencia y Fallback**:
-> Si Redis se reinicia, pierde los datos en memoria. Por ello, el sistema cuenta con un script de **Seeding** (`seed_redis.py`) que reconstruye el estado maestro de disponibilidad a partir de MongoDB. Si Redis cae del todo durante la operación, la UI automáticamente redirige las consultas a MongoDB de forma segura (Modo Degradado).
