@@ -20,7 +20,8 @@ from cassandradb.cassandra import (
     obtener_resenas_por_hotel,
     obtener_habitaciones_por_hotel,
     obtener_amenities_por_habitacion,
-    obtener_calificaciones_por_resena
+    obtener_calificaciones_por_resena,
+    registrar_documento_en_cassandra,
 )
 from redis_service import redis_service
 
@@ -151,9 +152,16 @@ def merge_extra_attributes(document, raw_extra_attributes):
     return {**document, **extra_attributes}
 
 
-def save_document(collection, document):
+def save_document(collection_name, collection, document):
     inserted = collection.insert_one(document)
-    st.session_state["last_success"] = f"Documento registrado correctamente con _id {inserted.inserted_id}."
+    cassandra_tables = registrar_documento_en_cassandra(
+        collection_name,
+        document
+    )
+    message = f"Documento registrado correctamente con _id {inserted.inserted_id}."
+    if cassandra_tables:
+        message += f" También se guardó en Cassandra: {', '.join(cassandra_tables)}."
+    st.session_state["last_success"] = message
     st.rerun()
 
 
@@ -208,7 +216,7 @@ def show_user_form():
             document = {"nombre": nombre, "apellido": apellido, "email": email, "telefono": telefono, "pais": pais, "ciudad": ciudad}
             document = merge_extra_attributes(document, raw_extra_attributes)
             if document is not None:
-                save_document(mongo.col_usuarios, document)
+                save_document("Usuarios", mongo.col_usuarios, document)
 
 
 def show_hotel_form():
@@ -225,7 +233,7 @@ def show_hotel_form():
             document = {"nombre": nombre, "ciudad": ciudad, "pais": pais, "categoria": categoria, "servicios": servicios, "calificacion_promedio": calificacion_promedio}
             document = merge_extra_attributes(document, raw_extra_attributes)
             if document is not None:
-                save_document(mongo.col_hoteles, document)
+                save_document("Hoteles", mongo.col_hoteles, document)
 
 
 def show_room_form():
@@ -257,7 +265,7 @@ def show_room_form():
             document = {"hotel_id": hotel["_id"], "numero": numero, "tipo": tipo, "capacidad_adultos": capacidad_adultos, "precio_por_noche": precio_por_noche, "disponible": disponible, "amenities": {"cama": cama, "metros_cuadrados": metros_cuadrados, "vista": vista, "tv_smart": tv_smart, "aire_acondicionado": aire_acondicionado, "jacuzzi": jacuzzi, "terraza": terraza}}
             document = merge_extra_attributes(document, raw_extra_attributes)
             if document is not None:
-                save_document(mongo.col_habitaciones, document)
+                save_document("Habitaciones", mongo.col_habitaciones, document)
 
 
 def show_booking_form():
@@ -386,7 +394,7 @@ def show_booking_form():
                 if not habitacion.get("disponible", False):
                     st.error("❌ La habitación seleccionada no está disponible.")
                     return
-                save_document(mongo.col_reservas, document)
+                save_document("Reservas", mongo.col_reservas, document)
                 mongo.col_habitaciones.update_one({"_id": habitacion["_id"]}, {"$set": {"disponible": False}})
                 st.toast("🎉 Reserva registrada en MongoDB (modo directo sin Redis).")
 
@@ -413,7 +421,7 @@ def show_review_form():
             document = {"hotel_id": hotel["_id"], "usuario_id": usuario["_id"], "calificacion": {"general": general, "limpieza": limpieza, "atencion": atencion, "ubicacion": ubicacion}, "comentario": comentario, "fecha": fecha.isoformat()}
             document = merge_extra_attributes(document, raw_extra_attributes)
             if document is not None:
-                save_document(mongo.col_resenas, document)
+                save_document("Reseñas", mongo.col_resenas, document)
 
 
 def show_manual_registration():

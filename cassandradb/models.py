@@ -23,21 +23,6 @@ class HotelesPorPais(BaseModel):
     calificacion_promedio = columns.Float()
 
 
-class Hoteles(BaseModel):
-    __table_name__ = "hotels"
-
-    hotel_id = columns.Text(primary_key=True)
-
-    nombre = columns.Text()
-
-    ciudad = columns.Text()
-
-    direccion = columns.Text()
-
-    categoria = columns.Integer()
-
-    calificacion_promedio = columns.Float()
-
 class ResenasPorHotelFecha(BaseModel):
     __table_name__ = "resenas_por_hotel_fecha"
 
