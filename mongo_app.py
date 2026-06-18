@@ -61,16 +61,16 @@ def load_docs(collection, projection=None):
 
 
 def user_label(usuario):
-    return f"{usuario.get('nombre', '')} {usuario.get('apellido', '')} | {usuario.get('email', '')}"
+    return f"{usuario.get('nombre', '')} {usuario.get('apellido', '')} | {usuario.get('email', '')} | {usuario.get('_id', '')}"
 
 
 def hotel_label(hotel):
-    return f"{hotel.get('nombre', 'Hotel sin nombre')} | {hotel.get('ciudad', 'Sin ciudad')}, {hotel.get('pais', 'Sin país')}"
+    return f"{hotel.get('nombre', 'Hotel sin nombre')} | {hotel.get('ciudad', 'Sin ciudad')}, {hotel.get('pais', 'Sin país')} | {hotel.get('_id', '')}"
 
 
 def room_label(habitacion):
     estado = "disponible" if habitacion.get("disponible") else "no disponible"
-    return f"Habitación {habitacion.get('numero', 's/n')} | {habitacion.get('tipo', 'sin tipo')} | {estado}"
+    return f"Habitación {habitacion.get('numero', 's/n')} | {habitacion.get('tipo', 'sin tipo')} | {estado} | {habitacion.get('_id', '')}"
 
 
 def document_label(collection_name, document):
