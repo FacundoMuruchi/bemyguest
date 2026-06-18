@@ -25,7 +25,8 @@ El sistema demuestra cómo resolver las distintas necesidades de negocio (catál
 Asegúrate de tener corriendo los servicios en tu máquina local:
 
 #### MongoDB (Puerto `27017`)
-Asegúrate de tener MongoDB levantado en su puerto estándar.
+
+#### Neo4j (Puertos `7687`)
 
 #### Redis (Puerto `6379`)
 Si usas **Docker Desktop**, puedes levantarlo en un segundo con:
@@ -37,12 +38,6 @@ docker run -d --name redis-bemyguest -p 6379:6379 redis:alpine
 Para las consultas optimizadas en columnas, levanta un nodo con:
 ```bash
 docker run --name cassandra-bemyguest -p 9042:9042 -d cassandra:latest
-```
-
-#### Neo4j (Puertos `7687` y `7474`)
-Para el motor de recomendaciones basado en grafos:
-```bash
-docker run --name neo4j-bemyguest -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=none -d neo4j:latest
 ```
 
 ### 2. Instalar Dependencias
