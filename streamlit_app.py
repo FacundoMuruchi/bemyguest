@@ -448,6 +448,67 @@ def show_sidebar():
         
         # --- Redis Metrics and Operations ---
         if redis_online:
+            st.subheader("👤 Sesión de Usuario")
+            token = st.session_state.get("session_token")
+            logged_in_user_id = None
+            
+            if token:
+                logged_in_user_id = redis_service.obtener_sesion(token)
+                if not logged_in_user_id:
+                    st.session_state.pop("session_token")
+                    st.warning("Tu sesión ha expirado.")
+            
+            if logged_in_user_id:
+                usr_doc = mongo.col_usuarios.find_one({"_id": ObjectId(logged_in_user_id)})
+                if usr_doc:
+                    st.success(f"Hola, {usr_doc.get('nombre')} {usr_doc.get('apellido')}")
+                    
+                    # Mostrar datos técnicos de la sesión
+                    ttl_sesion = redis_service.r.ttl(f"sesion:{token}")
+                    st.info(
+                        f"**Datos Técnicos de la Sesión:**\n\n"
+                        f"- **Token UUID:** `{token}`\n"
+                        f"- **Llave Redis:** `sesion:{token}`\n"
+                        f"- **TTL:** `{ttl_sesion} segs`"
+                    )
+                    
+                    if st.button("Cerrar Sesión", use_container_width=True):
+                        redis_service.cerrar_sesion(token)
+                        st.session_state.pop("session_token")
+                        st.rerun()
+            else:
+                usuarios = load_docs(mongo.col_usuarios)
+                if usuarios:
+                    selected_user = st.selectbox("Iniciar sesión como:", usuarios, format_func=user_label, key="login_select")
+                    if st.button("Iniciar Sesión", type="primary", use_container_width=True):
+                        new_token = redis_service.iniciar_sesion(str(selected_user["_id"]))
+                        st.session_state["session_token"] = new_token
+                        st.toast("✅ Sesión iniciada en Redis.")
+                        st.rerun()
+                else:
+                    st.info("Registrá usuarios para iniciar sesión.")
+                    
+            st.divider()
+            
+            st.subheader("👥 Usuarios en línea")
+            active_sessions = redis_service.r.keys("sesion:*")
+            if active_sessions:
+                for s_key in active_sessions:
+                    u_id = redis_service.r.get(s_key)
+                    ttl = redis_service.r.ttl(s_key)
+                    if u_id:
+                        try:
+                            u_doc = mongo.col_usuarios.find_one({"_id": ObjectId(u_id)})
+                            if u_doc:
+                                is_me = "*(Vos)*" if u_id == logged_in_user_id else ""
+                                st.write(f"🟢 {u_doc.get('nombre')} {u_doc.get('apellido')} {is_me} `({ttl}s)`")
+                        except Exception:
+                            pass
+            else:
+                st.caption("No hay usuarios activos.")
+
+            st.divider()
+
             st.subheader("⚡ Métricas de Redis")
             reservas_hoy = redis_service.get_reservas_hoy()
             st.metric("Reservas registradas hoy", reservas_hoy)

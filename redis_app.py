@@ -58,12 +58,16 @@ def get_keys_summary():
             elif "stats" in key:
                 tipo = "📈 Contador Estadístico"
                 significado = f"Total reservas: {val}"
+            elif "sesion" in key:
+                tipo = "🔑 Sesión Activa"
+                significado = f"Usuario ID: {val}"
             else:
-                tipo = "🔑 Sesión / Otra"
+                tipo = "Otra"
                 significado = str(val)
 
             all_keys.append({
                 "Llave en Redis": key,
+                "Tipo": tipo,
                 "Valor": val,
                 "Significado / Estado": significado,
                 "TTL / Expiración": ttl_str
@@ -83,6 +87,62 @@ if "sandbox_success" in st.session_state:
 if "sandbox_error" in st.session_state:
     st.error(st.session_state.pop("sandbox_error"))
 
+# --- BARRA LATERAL (SESIONES) ---
+with st.sidebar:
+    st.title("🔑 Pruebas de Sesión")
+    st.write("Podés iniciar sesión acá para ver cómo aparece el token en Redis en tiempo real.")
+    
+    token = st.session_state.get("session_token")
+    logged_in_user_id = None
+    
+    if token:
+        logged_in_user_id = redis_service.obtener_sesion(token)
+        if not logged_in_user_id:
+            st.session_state.pop("session_token")
+            st.warning("Tu sesión ha expirado en Redis.")
+            
+    if logged_in_user_id:
+        try:
+            usr_doc = mongo.col_usuarios.find_one({"_id": ObjectId(logged_in_user_id)})
+            if usr_doc:
+                st.success(f"Logueado como: {usr_doc.get('nombre')} {usr_doc.get('apellido')}")
+                
+                # Mostrar datos crudos de la sesión
+                ttl_sesion = redis_service.r.ttl(f"sesion:{token}")
+                st.info(
+                    f"**Datos Técnicos de la Sesión:**\n\n"
+                    f"- **Token UUID:** `{token}`\n"
+                    f"- **Llave en Redis:** `sesion:{token}`\n"
+                    f"- **Valor (User ID):** `{logged_in_user_id}`\n"
+                    f"- **Expira en:** `{ttl_sesion} segundos`"
+                )
+                
+                if st.button("Cerrar Sesión", use_container_width=True):
+                    redis_service.cerrar_sesion(token)
+                    st.session_state.pop("session_token")
+                    st.rerun()
+        except Exception:
+            pass
+    else:
+        try:
+            usuarios_db = list(mongo.col_usuarios.find({}, {"_id": 1, "nombre": 1, "apellido": 1}))
+            if usuarios_db:
+                selected_user = st.selectbox(
+                    "Iniciar sesión como:", 
+                    usuarios_db, 
+                    format_func=lambda u: f"{u.get('nombre')} {u.get('apellido')}",
+                    key="login_sandbox_select"
+                )
+                if st.button("Iniciar Sesión", type="primary", use_container_width=True):
+                    new_token = redis_service.iniciar_sesion(str(selected_user["_id"]))
+                    st.session_state["session_token"] = new_token
+                    st.toast("✅ Sesión iniciada en Redis.")
+                    st.rerun()
+            else:
+                st.info("No hay usuarios en MongoDB para iniciar sesión.")
+        except Exception:
+            pass
+
 # --- CONEXIÓN DIAGNÓSTICO ---
 redis_online = redis_service.ping()
 
@@ -94,7 +154,7 @@ else:
     st.success("🟢 **Conectado con éxito a Redis en localhost:6379**")
 
 # --- MÉTRICAS RÁPIDAS ---
-col_m1, col_m2, col_m3 = st.columns(3)
+col_m1, col_m2, col_m3, col_m4 = st.columns(4)
 with col_m1:
     total_keys = len(redis_service.r.keys("habitacion:*:disponible"))
     st.metric("Habitaciones registradas en Redis", total_keys)
@@ -104,6 +164,9 @@ with col_m2:
 with col_m3:
     reservas_hoy = redis_service.get_reservas_hoy()
     st.metric("Contador de Reservas Hoy (`stats`)", reservas_hoy)
+with col_m4:
+    total_sesiones = len(redis_service.r.keys("sesion:*"))
+    st.metric("Sesiones Activas", total_sesiones)
 
 st.divider()
 
@@ -151,48 +214,48 @@ with col_left:
         
         st.write("---")
         
-        # Acciones interactivas
-        st.markdown("**Acciones Atómicas de Redis:**")
+        # Simular Flujo de Reserva
+        st.markdown("**Simular Proceso de Reserva:**")
         
-        # 1. toggle disponibilidad
-        col_btn1, col_btn2 = st.columns(2)
-        with col_btn1:
-            if st.button("Marcar como Disponible", use_container_width=True):
-                redis_service.set_disponible(hab_id, True)
-                st.session_state["sandbox_success"] = "🟢 Habitación marcada como disponible en Redis."
-                st.rerun()
-        with col_btn2:
-            if st.button("Marcar como NO Disponible", use_container_width=True):
-                redis_service.set_disponible(hab_id, False)
-                st.session_state["sandbox_success"] = "🔴 Habitación marcada como NO disponible en Redis."
-                st.rerun()
-
-        st.write("")
-        
-        # 2. Lock temporal
-        col_btn3, col_btn4 = st.columns(2)
-        with col_btn3:
-            if st.button("🔒 Intentar Adquirir Lock", type="primary", use_container_width=True):
-                exito = redis_service.adquirir_lock(hab_id, usr_id, ttl_segundos=120)
-                if exito:
-                    st.session_state["sandbox_success"] = f"🔒 ¡Lock adquirido con éxito por 120s para el usuario {usr_id}!"
-                else:
-                    owner = redis_service.get_lock_owner(hab_id)
-                    st.session_state["sandbox_error"] = f"❌ Fallo de concurrencia: Habitación ya bloqueada en Redis por {owner}."
-                st.rerun()
-        with col_btn4:
-            if st.button("🔓 Liberar Lock Manual", use_container_width=True):
-                redis_service.liberar_lock(hab_id)
-                st.session_state["sandbox_success"] = "🔓 Candado temporal liberado con éxito en Redis."
-                st.rerun()
-                
-        # 3. Métricas
-        st.write("")
-        st.markdown("**Métricas:**")
-        if st.button("📈 Incrementar Reservas Hoy (+1)", use_container_width=True):
-            redis_service.incrementar_reservas_hoy()
-            st.session_state["sandbox_success"] = "📈 Contador stats:reservas:hoy incrementado exitosamente."
-            st.rerun()
+        # Lógica de estado basada en la caché de Redis
+        if lock_owner_cache == usr_id:
+            # El usuario actual tiene el lock temporal
+            st.success("🔒 ¡Lock adquirido! Estás en proceso de reserva (Revisá la tabla a la derecha).")
+            col_conf1, col_conf2 = st.columns(2)
+            with col_conf1:
+                if st.button("Paso 2: Confirmar Pago y Completar", type="primary", use_container_width=True):
+                    # Simulamos el commit en BD y actualizamos Redis
+                    redis_service.set_disponible(hab_id, False)
+                    redis_service.liberar_lock(hab_id)
+                    redis_service.incrementar_reservas_hoy()
+                    st.session_state["sandbox_success"] = "🎉 ¡Reserva confirmada! Habitación marcada como no disponible, stats actualizados y lock liberado."
+                    st.rerun()
+            with col_conf2:
+                if st.button("Cancelar (Liberar Lock)", use_container_width=True):
+                    redis_service.liberar_lock(hab_id)
+                    st.session_state["sandbox_error"] = "🔓 Reserva cancelada. Se liberó el lock."
+                    st.rerun()
+        else:
+            # El usuario actual NO tiene el lock
+            if not disponibilidad_cache:
+                st.error("❌ La habitación seleccionada ya fue reservada (No disponible).")
+                if st.button("Resetear Disponibilidad (Modo Administrador)", use_container_width=True):
+                    redis_service.set_disponible(hab_id, True)
+                    st.rerun()
+            elif lock_owner_cache:
+                st.warning(f"⚠️ La habitación está bloqueada por el usuario: {lock_owner_cache}. Esperá a que expire el lock o libere.")
+                if st.button("Forzar liberación de Lock (Modo Administrador)", use_container_width=True):
+                    redis_service.liberar_lock(hab_id)
+                    st.rerun()
+            else:
+                st.info("🟢 Habitación libre. Podés iniciar el proceso de reserva.")
+                if st.button("Paso 1: Iniciar Reserva (Bloquear Habitación)", type="primary", use_container_width=True):
+                    exito = redis_service.adquirir_lock(hab_id, usr_id, ttl_segundos=120)
+                    if exito:
+                        st.session_state["sandbox_success"] = f"🔒 Lock de 120s adquirido por el usuario {usr_id}. ¡Mirá la tabla a la derecha!"
+                    else:
+                        st.session_state["sandbox_error"] = "❌ Fallo de concurrencia: Alguien más ganó el lock."
+                    st.rerun()
 
 
 with col_right:
@@ -216,8 +279,40 @@ with col_right:
     if not keys_data:
         st.info("No hay llaves registradas en Redis para BeMyGuest. Presiona el botón de 'Sincronizar desde MongoDB' para poblar la base de datos en memoria.")
     else:
-        st.dataframe(
-            keys_data,
-            use_container_width=True,
-            hide_index=True
-        )
+        # Agrupar llaves por tipo para mejor visualización
+        sesiones = [k for k in keys_data if "🔑 Sesión Activa" in k["Tipo"]]
+        locks = [k for k in keys_data if "🔒 Bloqueo" in k["Tipo"]]
+        stats = [k for k in keys_data if "📈 Contador" in k["Tipo"]]
+        disponibilidad = [k for k in keys_data if "🟢 Disponibilidad" in k["Tipo"]]
+        
+        # Crear pestañas
+        tab_disp, tab_locks, tab_ses, tab_stats = st.tabs([
+            f"🟢 Disponibilidad ({len(disponibilidad)})", 
+            f"🔒 Locks ({len(locks)})", 
+            f"🔑 Sesiones ({len(sesiones)})", 
+            f"📈 Estadísticas ({len(stats)})"
+        ])
+        
+        with tab_disp:
+            if disponibilidad:
+                st.dataframe(disponibilidad, use_container_width=True, hide_index=True)
+            else:
+                st.info("No hay llaves de disponibilidad. Probá sincronizar desde MongoDB.")
+                
+        with tab_locks:
+            if locks:
+                st.dataframe(locks, use_container_width=True, hide_index=True)
+            else:
+                st.info("No hay locks temporales de reserva activos en este momento.")
+                
+        with tab_ses:
+            if sesiones:
+                st.dataframe(sesiones, use_container_width=True, hide_index=True)
+            else:
+                st.info("No hay sesiones de usuarios activas.")
+                
+        with tab_stats:
+            if stats:
+                st.dataframe(stats, use_container_width=True, hide_index=True)
+            else:
+                st.info("No hay contadores ni estadísticas registradas.")

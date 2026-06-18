@@ -1,0 +1,22 @@
+# 1. Introducción
+
+En el contexto actual de la industria hotelera y el turismo global, la gestión eficiente de reservas, disponibilidad y reseñas de usuarios exige sistemas capaces de procesar altos volúmenes de datos con baja latencia y alta confiabilidad. Las plataformas tradicionales basadas en un único modelo de base de datos relacional a menudo enfrentan cuellos de botella al intentar resolver problemas de distinta naturaleza, como búsquedas rápidas, análisis de grafos o manejo masivo de concurrencia.
+
+Para abordar estos desafíos, el presente Trabajo Práctico Integrador propone como caso de estudio un dominio de negocio hotelero simulado, bajo el nombre **BeMyGuest**. Es importante destacar que el objetivo principal no es el desarrollo de una aplicación de software comercial, sino utilizar este escenario como un pretexto práctico para **modelar datos y demostrar la interacción** entre diferentes motores de bases de datos. A través de scripts de programación y una interfaz visual de prueba, se materializan las operaciones de consulta, inserción y manejo de concurrencia requeridas por el negocio.
+
+Lo que distingue a este trabajo es su enfoque arquitectónico basado en el paradigma de **Persistencia Políglota**. Reconociendo que "no existe una única herramienta que sea la mejor para todos los problemas", el proyecto modeliza el dominio distribuyéndolo en cuatro motores NoSQL distintos, asignándole a cada uno la responsabilidad para la cual fue diseñado:
+
+1. **MongoDB (Orientada a Documentos):** Actúa como el núcleo del sistema y la fuente principal de la verdad, almacenando entidades ricas y estructuradas como los perfiles de usuarios, el catálogo de hoteles, el inventario de habitaciones y el historial de reservas.
+2. **Redis (En Memoria):** Se emplea como una capa de altísima velocidad para gestionar datos efímeros y críticos en tiempo real. Esto incluye el almacenamiento de sesiones activas de usuarios, cachés de disponibilidad para lecturas masivas y un sistema de bloqueos atómicos (locks) para prevenir la concurrencia desleal durante el proceso de reserva.
+3. **Neo4j (Orientada a Grafos):** Implementa el motor de recomendaciones de la plataforma. Al modelar a los usuarios y sus interacciones (reseñas, reservas) como un grafo, permite descubrir relaciones complejas y sugerir alojamientos basados en similitud o preferencias indirectas de forma nativa y eficiente.
+4. **Apache Cassandra (Orientada a Columnas):** Diseñada para la alta disponibilidad y escalabilidad masiva, se encarga del almacenamiento y consulta de grandes volúmenes de datos históricos, enfocándose en un modelo de consultas (query-first design) ideal para analítica y auditoría, como listar todas las reseñas de un hotel específico de forma instantánea.
+
+### 1.1. Idea de Negocio y Viabilidad
+
+El mercado actual de la hospitalidad y las reservas en línea (Booking, Airbnb, Despegar) es altamente competitivo. La rentabilidad en este sector depende de márgenes ajustados, por lo que la eficiencia operativa y la satisfacción del usuario son críticas. La propuesta de valor de **BeMyGuest** se fundamenta en resolver tres grandes fricciones de este negocio, demostrando su viabilidad comercial:
+
+- **Prevención de pérdidas por Overbooking:** En eventos de alta demanda, vender la misma habitación dos veces genera costos de reubicación y daño reputacional grave. El manejo de bloqueos atómicos asegura un inventario 100% confiable.
+- **Personalización y Retención (Cross-Selling):** Los usuarios modernos esperan sugerencias inmediatas. Implementar un motor de recomendaciones nativo permite sugerir alojamientos similares basándose en el comportamiento de otros usuarios, aumentando la tasa de conversión de ventas.
+- **Análisis de la Voz del Cliente (Auditoría):** Las cadenas hoteleras necesitan procesar miles de reseñas históricas para tomar decisiones gerenciales (por ejemplo, detectar problemas recurrentes de limpieza). Una arquitectura escalable garantiza que estos análisis se generen sin afectar la experiencia de compra de los usuarios en vivo.
+
+A través de esta implementación, el objetivo de este informe es documentar la arquitectura, las decisiones de diseño y las estrategias de integración y sincronización de datos a nivel de aplicación, demostrando de manera práctica las ventajas y desafíos de un ecosistema NoSQL distribuido en el ámbito de la ingeniería de datos.
