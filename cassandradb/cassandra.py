@@ -53,6 +53,58 @@ def eliminar_todos_documentos(modelo):
         row.delete()
 
 
+def registrar_hotel(documento):
+    return HotelesPorPais.create(
+        pais=str(documento["pais"]),
+        hotel_id=str(documento["_id"]),
+        nombre=str(documento.get("nombre", "")),
+        ciudad=str(documento.get("ciudad", "")),
+        categoria=int(documento.get("categoria", 0) or 0),
+        calificacion_promedio=float(documento.get("calificacion_promedio", 0.0) or 0.0),
+    )
+
+
+def registrar_habitacion(documento):
+    habitacion = HabitacionesPorHotel.create(
+        hotel_id=str(documento["hotel_id"]),
+        habitacion_id=str(documento["_id"]),
+        numero=str(documento.get("numero", "")),
+        tipo=str(documento.get("tipo", "")),
+        capacidad_adultos=int(documento.get("capacidad_adultos", 0) or 0),
+        precio_por_noche=float(documento.get("precio_por_noche", 0.0) or 0.0),
+    )
+
+    for nombre, valor in documento.get("amenities", {}).items():
+        AmenitiesPorHabitacion.create(
+            hotel_id=str(documento["hotel_id"]),
+            habitacion_id=str(documento["_id"]),
+            amenity_nombre=str(nombre),
+            descripcion=str(valor),
+        )
+
+    return habitacion
+
+
+def registrar_resena(documento):
+    resena = ResenasPorHotelFecha.create(
+        hotel_id=str(documento["hotel_id"]),
+        fecha=documento["fecha"],
+        resena_id=str(documento["_id"]),
+        usuario_id=str(documento["usuario_id"]),
+        comentario=str(documento.get("comentario", "")),
+    )
+
+    for nombre, puntuacion in documento.get("calificacion", {}).items():
+        CalifacionPorResena.create(
+            hotel_id=str(documento["hotel_id"]),
+            resena_id=str(documento["_id"]),
+            calificacion_nombre=str(nombre),
+            puntuacion=int(puntuacion),
+        )
+
+    return resena
+
+
 def cargar_dataset_json(path):
 
     dataset_path = Path(path)

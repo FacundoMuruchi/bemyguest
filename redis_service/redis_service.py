@@ -5,6 +5,8 @@ Evita el acoplamiento directo entre la interfa de ui y el motor en memoria.
 """
 
 import os
+from datetime import datetime, timedelta
+
 import redis
 
 r = redis.Redis(
@@ -86,20 +88,44 @@ def get_lock_owner(habitacion_id: str) -> str | None:
 
 # Contadores    
 
+RESERVAS_HOY_KEY = "stats:reservas:hoy"
+
+
+def segundos_hasta_proxima_medianoche() -> int:
+    ahora = datetime.now().astimezone()
+    manana = ahora.date() + timedelta(days=1)
+    proxima_medianoche = datetime.combine(manana, datetime.min.time(), tzinfo=ahora.tzinfo)
+    return max(1, int((proxima_medianoche - ahora).total_seconds()))
+
+
+def asegurar_ttl_reservas_hoy():
+    ttl = r.ttl(RESERVAS_HOY_KEY)
+    if ttl in (-1, -2):
+        r.expire(RESERVAS_HOY_KEY, segundos_hasta_proxima_medianoche())
+
+
 def incrementar_reservas_hoy():
     """
     Incrementa atómicamente el contador de reservas exitosas diarias en Redis
-    Configura una expiración de 24 horas si es una métrica nueva 
+    y conserva el TTL diario fijo hasta la próxima medianoche local.
     """
-    key = "stats:reservas:hoy"
-    r.incr(key)
-    r.expire(key, 86400)
+    r.incr(RESERVAS_HOY_KEY)
+    asegurar_ttl_reservas_hoy()
+
+
+def reiniciar_reservas_hoy():
+    """Reinicia el contador diario sin reiniciar el TTL si ya existe."""
+    ttl = r.ttl(RESERVAS_HOY_KEY)
+    if ttl > 0:
+        r.set(RESERVAS_HOY_KEY, "0", keepttl=True)
+    else:
+        r.set(RESERVAS_HOY_KEY, "0", ex=segundos_hasta_proxima_medianoche())
 
 
 def get_reservas_hoy() -> int:
     """Retorna el total de reservas realizadas hoy registradas en Redis."""
     try:
-        val = r.get("stats:reservas:hoy")
+        val = r.get(RESERVAS_HOY_KEY)
         return int(val) if val else 0
     except Exception:
         return 0
@@ -112,8 +138,8 @@ def seed_from_habitaciones(habitaciones: list) -> int:
     Llena en batch las llaves de disponibilidad en Redis
     Retorna la cantidad de habitaciones cargadas exitosamente
     """
-    # 1. Limpiamos todas las llaves de disponibilidad viejas para no dejar huérfanas
-    llaves_viejas = r.keys("habitacion:*:disponible")
+    # 1. Limpiamos llaves viejas para no dejar estado huérfano
+    llaves_viejas = r.keys("habitacion:*:disponible") + r.keys("lock:habitacion:*")
     if llaves_viejas:
         r.delete(*llaves_viejas)
 
@@ -125,8 +151,8 @@ def seed_from_habitaciones(habitaciones: list) -> int:
         pipe.set(key, value)
     
     # metrica de reservas diarias inicializadas
-    pipe.setnx("stats:reservas:hoy", "0")
-    pipe.expire("stats:reservas:hoy", 86400)
+    pipe.setnx(RESERVAS_HOY_KEY, "0")
     
     pipe.execute()
+    asegurar_ttl_reservas_hoy()
     return len(habitaciones)

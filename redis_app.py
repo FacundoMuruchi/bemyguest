@@ -9,13 +9,13 @@ Uso:
 """
 
 import streamlit as st
-from bson import ObjectId
+
 from mongodb import mongo
 from redis_service import redis_service
 
-# Configuración de página premium
+# Configuración de página
 st.set_page_config(
-    page_title="BeMyGuest - Redis Sandbox",
+    page_title="BeMyGuest - Redis",
     page_icon="⚡",
     layout="wide"
 )
@@ -72,6 +72,23 @@ def get_keys_summary():
     return all_keys
 
 
+def load_mongo_entities():
+    mongo.client.admin.command("ping")
+    usuarios = list(
+        mongo.col_usuarios.find(
+            {},
+            {"_id": 1, "nombre": 1, "apellido": 1},
+        ).sort("_id", 1)
+    )
+    habitaciones = list(
+        mongo.col_habitaciones.find(
+            {},
+            {"_id": 1, "numero": 1, "tipo": 1, "disponible": 1},
+        ).sort("_id", 1)
+    )
+    return usuarios, habitaciones
+
+
 # --- RENDER PRINCIPAL ---
 
 st.title("⚡ BeMyGuest — Redis Sandbox & Auditor en Vivo")
@@ -114,16 +131,14 @@ with col_left:
     st.subheader("🎮 Simulador de Concurrencia y Locks")
     st.write("Usa este panel para simular reservas concurrentes, colocar candados manuales o forzar cambios de disponibilidad.")
     
-    # Cargar datos de MongoDB para los dropdowns
     try:
-        usuarios = list(mongo.col_usuarios.find({}, {"_id": 1, "nombre": 1, "apellido": 1}))
-        habitaciones = list(mongo.col_habitaciones.find({}, {"_id": 1, "numero": 1, "tipo": 1}))
+        usuarios, habitaciones = load_mongo_entities()
     except Exception as e:
         st.error(f"No se pudo conectar a MongoDB para cargar usuarios y habitaciones: {e}")
         st.stop()
 
     if not usuarios or not habitaciones:
-        st.warning("Asegúrate de importar el dataset en MongoDB primero para poder operar en el simulador.")
+        st.warning("MongoDB no tiene usuarios o habitaciones para operar en el simulador.")
     else:
         # Selectores
         usuario = st.selectbox(
@@ -189,32 +204,31 @@ with col_left:
         # 3. Métricas
         st.write("")
         st.markdown("**Métricas:**")
-        if st.button("📈 Incrementar Reservas Hoy (+1)", use_container_width=True):
-            redis_service.incrementar_reservas_hoy()
-            st.session_state["sandbox_success"] = "📈 Contador stats:reservas:hoy incrementado exitosamente."
-            st.rerun()
+        col_metric_1, col_metric_2 = st.columns(2)
+        with col_metric_1:
+            if st.button("📈 Incrementar Reservas Hoy (+1)", use_container_width=True):
+                redis_service.incrementar_reservas_hoy()
+                st.session_state["sandbox_success"] = "📈 Contador stats:reservas:hoy incrementado exitosamente."
+                st.rerun()
+        with col_metric_2:
+            if st.button("Reiniciar contador a 0", use_container_width=True):
+                redis_service.reiniciar_reservas_hoy()
+                st.session_state["sandbox_success"] = "Contador stats:reservas:hoy reiniciado a 0."
+                st.rerun()
 
 
 with col_right:
     st.subheader("🕵️ Inspección y Visualización de Llaves en Tiempo Real")
     st.write("Esta tabla lee en vivo el servidor de Redis. Puedes interactuar en el panel izquierdo y ver cómo cambian las llaves, los valores y cómo se descuentan los segundos del TTL en tiempo real.")
     
-    col_ref, col_seed = st.columns([1, 1])
-    with col_ref:
-        if st.button("🔄 Refrescar Llaves", type="secondary", use_container_width=True):
-            st.rerun()
-    with col_seed:
-        if st.button("⚙️ Sincronizar desde MongoDB (Seeding)", use_container_width=True):
-            habitaciones_db = list(mongo.col_habitaciones.find({}))
-            cantidad = redis_service.seed_from_habitaciones(habitaciones_db)
-            st.session_state["sandbox_success"] = f"⚙️ Sincronización completada. {cantidad} habitaciones mapped a Redis."
-            st.rerun()
+    if st.button("🔄 Refrescar Llaves", type="secondary", use_container_width=True):
+        st.rerun()
             
     # Traer llaves estructuradas
     keys_data = get_keys_summary()
     
     if not keys_data:
-        st.info("No hay llaves registradas en Redis para BeMyGuest. Presiona el botón de 'Sincronizar desde MongoDB' para poblar la base de datos en memoria.")
+        st.info("No hay llaves registradas en Redis para BeMyGuest. Importá o registrá habitaciones desde mongo_app.py para sincronizar disponibilidad.")
     else:
         st.dataframe(
             keys_data,
