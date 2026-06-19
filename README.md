@@ -22,7 +22,7 @@ El sistema demuestra cómo resolver las distintas necesidades de negocio (catál
 ## 💻 Requisitos y Preparación
 
 ### 1. Iniciar los Motores NoSQL
-Asegúrate de tener corriendo los servicios en tu máquina local:
+Asegurarse de tener corriendo los serviciosde forma local:
 
 #### MongoDB (Puerto `27017`)
 
@@ -41,11 +41,11 @@ docker run --name cassandra-bemyguest -p 9042:9042 -d cassandra:latest
 ```
 
 ### 2. Instalar Dependencias
-Este proyecto utiliza `uv` para una gestión rápida y moderna de paquetes y entornos virtuales. Ejecuta en la raíz del proyecto:
+Este proyecto utiliza `uv` para una gestión rápida de entornos virtuales. Ejecuta en la raíz del proyecto:
 ```bash
 uv sync
 ```
-*Esto sincronizará el entorno virtual `.venv` instalando dependencias clave como `streamlit`, `pymongo` y `redis`.*
+*Esto sincronizará el entorno virtual `.venv` instalando dependencias clave*
 
 ---
 
