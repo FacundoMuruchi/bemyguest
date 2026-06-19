@@ -285,7 +285,7 @@ with col_left:
             else:
                 # El usuario actual NO tiene el lock
                 if not disponibilidad_cache:
-                    st.error("❌ La habitación seleccionada ya fue reservada (No disponible).")
+                    st.warning("⚠️ Habitación Ocupada: Esta habitación ya cuenta con una reserva confirmada.")
                     if st.button("Resetear Disponibilidad (Modo Administrador)", use_container_width=True):
                         redis_service.set_disponible(hab_id, True)
                         st.rerun()
