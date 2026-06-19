@@ -239,7 +239,6 @@ def _sync_neo4j_create(result: OperationResult, collection_name: str, document: 
                     document.get("numero", ""),
                     document.get("tipo", ""),
                     float(document.get("precio_por_noche", 0.0) or 0.0),
-                    bool(document.get("disponible", True)),
                 )
                 neo4j_service.crear_relacion_habitacion_hotel(
                     driver,

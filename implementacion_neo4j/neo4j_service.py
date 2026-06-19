@@ -84,7 +84,7 @@ def crear_hotel(driver, hotel_id: str, nombre: str, ciudad: str, pais: str, cate
             categoria=categoria,
         )
 
-def crear_habitacion(driver, habitacion_id: str, numero: str, tipo: str, precio: float, disponible: bool):
+def crear_habitacion(driver, habitacion_id: str, numero: str, tipo: str, precio: float):
     # Solo crea el nodo Habitacion
     with driver.session() as session:
         session.run(
@@ -92,14 +92,12 @@ def crear_habitacion(driver, habitacion_id: str, numero: str, tipo: str, precio:
             MERGE (hab:Habitacion {id: $id})
             SET hab.numero     = $numero,
                 hab.tipo       = $tipo,
-                hab.precio     = $precio,
-                hab.disponible = $disponible
+                hab.precio     = $precio
             """,
             id=habitacion_id,
             numero=numero,
             tipo=tipo,
             precio=precio,
-            disponible=disponible,
         )
 
 
@@ -210,7 +208,6 @@ def importar_dataset(path, reset=True):
             hab.get("numero", ""),
             hab.get("tipo", ""),
             hab.get("precio_por_noche", 0.0),
-            hab.get("disponible", True),
         )
         crear_relacion_habitacion_hotel(driver, hab["_id"], hab["hotel_id"])
         
