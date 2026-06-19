@@ -5,6 +5,7 @@ Evita el acoplamiento directo entre la interfa de ui y el motor en memoria.
 """
 
 import os
+import uuid
 from datetime import datetime, timedelta
 
 import redis
@@ -156,3 +157,33 @@ def seed_from_habitaciones(habitaciones: list) -> int:
     pipe.execute()
     asegurar_ttl_reservas_hoy()
     return len(habitaciones)
+
+# Sesiones de usuario
+
+def iniciar_sesion(usuario_id: str, ttl_segundos: int = 3600) -> str:
+    """
+    Crea una sesión para el usuario en Redis con un token único y un TTL.
+    Retorna el token de sesión generado.
+    """
+    token = str(uuid.uuid4())
+    key = f"sesion:{token}"
+    r.set(key, usuario_id, ex=ttl_segundos)
+    return token
+
+
+def obtener_sesion(token: str) -> str | None:
+    """
+    Obtiene el usuario_id asociado a un token de sesión.
+    Si la sesión existe, renueva su TTL para mantenerla activa.
+    """
+    key = f"sesion:{token}"
+    usuario_id = r.get(key)
+    if usuario_id:
+        # Renovar TTL por actividad
+        r.expire(key, 3600)
+    return usuario_id
+
+
+def cerrar_sesion(token: str):
+    """Elimina la sesión de Redis."""
+    r.delete(f"sesion:{token}")

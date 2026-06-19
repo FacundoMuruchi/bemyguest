@@ -22,7 +22,7 @@ El sistema demuestra cómo resolver las distintas necesidades de negocio (catál
 ## 💻 Requisitos y Preparación
 
 ### 1. Iniciar los Motores NoSQL
-Asegúrate de tener corriendo los servicios en tu máquina local:
+Asegurarse de tener corriendo los serviciosde forma local:
 
 #### MongoDB (Puerto `27017`)
 Asegúrate de tener MongoDB levantado en su puerto estándar.
@@ -46,11 +46,11 @@ docker run --name neo4j-bemyguest -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=none -
 ```
 
 ### 2. Instalar Dependencias
-Este proyecto utiliza `uv` para una gestión rápida y moderna de paquetes y entornos virtuales. Ejecuta en la raíz del proyecto:
+Este proyecto utiliza `uv` para una gestión rápida de entornos virtuales. Ejecuta en la raíz del proyecto:
 ```bash
 uv sync
 ```
-*Esto sincronizará el entorno virtual `.venv` instalando dependencias clave como `streamlit`, `pymongo` y `redis`.*
+*Esto sincronizará el entorno virtual `.venv` instalando dependencias clave*
 
 ---
 
