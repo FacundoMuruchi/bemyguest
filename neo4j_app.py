@@ -27,7 +27,7 @@ def load_usuarios():
         """
         MATCH (u:Usuario)
         RETURN u.id AS id, u.nombre AS nombre, u.apellido AS apellido
-        ORDER BY u.apellido, u.nombre
+        ORDER BY u.id
         LIMIT 500
         """
     )
@@ -107,7 +107,7 @@ def show_graph_explorer_tab():
             """
             MATCH (h:Hotel)-[:TIENE]->(hab:Habitacion)
             RETURN h.id AS hotel_id, h.nombre AS hotel, hab.id AS habitacion_id,
-                   hab.numero AS numero, hab.tipo AS tipo, hab.disponible AS disponible
+                   hab.numero AS numero, hab.tipo AS tipo
             ORDER BY h.nombre, hab.numero
             LIMIT $limit
             """,
